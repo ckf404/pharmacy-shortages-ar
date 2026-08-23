@@ -15,6 +15,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -87,6 +88,7 @@ public class MainActivity extends Activity {
         webView.getSettings().setUseWideViewPort(true);
         webView.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
         webView.getSettings().setSupportMultipleWindows(false);
+        webView.addJavascriptInterface(new PharmacyAndroidBridge(), "PharmacyAndroid");
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onProgressChanged(WebView view, int progress) {
@@ -148,6 +150,24 @@ public class MainActivity extends Activity {
             }
         }
         return true;
+    }
+
+    private boolean isTrustedAppPage() {
+        String currentUrl = webView == null ? null : webView.getUrl();
+        if (currentUrl == null) return false;
+        String host = Uri.parse(currentUrl).getHost();
+        return host != null && host.endsWith("manus.space");
+    }
+
+    private final class PharmacyAndroidBridge {
+        @JavascriptInterface
+        public void openWhatsApp(String rawUrl) {
+            if (rawUrl == null) return;
+            final Uri uri = Uri.parse(rawUrl);
+            runOnUiThread(() -> {
+                if (isTrustedAppPage() && isWhatsAppLink(uri)) MainActivity.this.openWhatsApp(uri);
+            });
+        }
     }
 
     private View buildErrorPanel() {

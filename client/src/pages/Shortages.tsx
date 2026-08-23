@@ -53,7 +53,9 @@ export default function Shortages() {
   const sendReview = async () => {
     if (!orderSupplierId || selected.length === 0) return;
     const result = await prepareOrder.mutateAsync({ supplierId: Number(orderSupplierId), itemIds: selected });
-    window.open(result.whatsappUrl, "_blank", "noopener,noreferrer");
+    const androidBridge = (window as Window & { PharmacyAndroid?: { openWhatsApp: (url: string) => void } }).PharmacyAndroid;
+    if (androidBridge?.openWhatsApp) androidBridge.openWhatsApp(result.whatsappUrl);
+    else window.open(result.whatsappUrl, "_blank", "noopener,noreferrer");
     toast.success("تم تجهيز الرسالة وفتح واتساب للمراجعة.");
   };
 
