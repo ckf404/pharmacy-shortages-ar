@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { hasPermission } from "@/lib/permissions";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Check, ClipboardList, Loader2, MessageCircleMore, PackagePlus, RotateCcw, Trash2, Truck } from "lucide-react";
+import { Check, CheckCircle2, ClipboardList, Loader2, MessageCircleMore, PackagePlus, RotateCcw, Trash2, Truck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -57,13 +57,14 @@ export default function Shortages() {
     toast.success("تم تجهيز الرسالة وفتح واتساب للمراجعة.");
   };
 
-  const renderItem = (item: any, received = false) => <li key={item.id} className="group rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition hover:border-teal-100 hover:shadow-md">
+  const renderItem = (item: any, received = false) => <li key={item.id} className={`group rounded-2xl border p-4 shadow-sm transition ${received ? "border-emerald-100 bg-emerald-50/45" : "border-slate-100 bg-white hover:border-teal-100 hover:shadow-md"}`}>
     <div className="flex items-start gap-3">
       {!received && <Checkbox checked={selected.includes(item.id)} onCheckedChange={() => toggleSelected(item.id)} aria-label={`تحديد ${item.productName}`} className="mt-1" />}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-bold text-slate-800">{item.productName}</h3>
+          <h3 className={`font-bold ${received ? "text-slate-500 line-through decoration-emerald-500 decoration-2" : "text-slate-800"}`}>{item.productName}</h3>
           <span className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${priorityClass[item.priority as keyof typeof priorityClass]}`}>{priorityText[item.priority as keyof typeof priorityText]}</span>
+          {received && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white"><CheckCircle2 className="h-3.5 w-3.5" />تم الاستلام</span>}
         </div>
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
           {item.suggestedSupplierName && <span><Truck className="ml-1 inline h-3.5 w-3.5" />{item.suggestedSupplierName}</span>}
@@ -103,10 +104,9 @@ export default function Shortages() {
       </form> : <section className="panel h-fit"><div className="panel-heading"><span className="icon-surface"><PackagePlus className="h-5 w-5" /></span><div><h2>الإضافة مقيدة</h2><p>يمكن للمشرف تفعيل صلاحية إضافة النواقص لحسابك من المستخدمين.</p></div></div></section>}
       <div className="space-y-5">
         <section className="panel">
-          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div className="panel-heading"><span className="icon-surface"><ClipboardList className="h-5 w-5" /></span><div><h2>القائمة المفتوحة</h2><p>{openItems.length ? "الأصناف التي ما زالت بانتظار الوصول." : "لا توجد نواقص مفتوحة حاليًا."}</p></div></div></div>
-          {openItems.length > 0 && <><ul className="mt-5 space-y-3">{openItems.map(item => renderItem(item))}</ul>{canPrepare && <><div className="mt-5 rounded-xl bg-teal-50 p-3 sm:flex sm:items-center sm:gap-3"><Select value={orderSupplierId} onValueChange={setOrderSupplierId}><SelectTrigger className="bg-white sm:w-56"><SelectValue placeholder="اختر مخزنًا للإرسال" /></SelectTrigger><SelectContent>{activeSuppliers.map(supplier => <SelectItem key={supplier.id} value={String(supplier.id)}>{supplier.name}</SelectItem>)}</SelectContent></Select><Button onClick={sendReview} disabled={!orderSupplierId || selected.length === 0 || prepareOrder.isPending} className="mt-2 h-10 w-full bg-teal-700 hover:bg-teal-800 sm:mt-0 sm:w-auto"><MessageCircleMore className="ml-2 h-4 w-4" />إرسال واتساب ({selected.length})</Button></div><p className="mt-2 text-xs text-slate-500">يُفتح واتساب برسالة جاهزة للمراجعة؛ لا تُرسل أي رسالة تلقائيًا.</p></>}</>}
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div className="panel-heading"><span className="icon-surface"><ClipboardList className="h-5 w-5" /></span><div><h2>قائمة اليوم</h2><p>{openItems.length ? "الأصناف المفتوحة أولاً، وتبقى الأصناف المستلمة ظاهرة ومشطوبة في نفس القائمة." : receivedItems.length ? "كل أصناف اليوم استُلمت؛ أبقيناها ظاهرة كسجل واضح." : "لا توجد نواقص مسجلة اليوم."}</p></div></div></div>
+          {(openItems.length + receivedItems.length) > 0 && <><ul className="mt-5 space-y-3">{[...openItems, ...receivedItems].map(item => renderItem(item, item.status === "received"))}</ul>{openItems.length > 0 && canPrepare && <><div className="mt-5 rounded-xl bg-teal-50 p-3 sm:flex sm:items-center sm:gap-3"><Select value={orderSupplierId} onValueChange={setOrderSupplierId}><SelectTrigger className="bg-white sm:w-56"><SelectValue placeholder="اختر مخزنًا للإرسال" /></SelectTrigger><SelectContent>{activeSuppliers.map(supplier => <SelectItem key={supplier.id} value={String(supplier.id)}>{supplier.name}</SelectItem>)}</SelectContent></Select><Button onClick={sendReview} disabled={!orderSupplierId || selected.length === 0 || prepareOrder.isPending} className="mt-2 h-10 w-full bg-teal-700 hover:bg-teal-800 sm:mt-0 sm:w-auto"><MessageCircleMore className="ml-2 h-4 w-4" />إرسال واتساب ({selected.length})</Button></div><p className="mt-2 text-xs text-slate-500">يُفتح واتساب برسالة جاهزة للمراجعة؛ لا تُرسل أي رسالة تلقائيًا.</p></>}</>}
         </section>
-        <section className="panel"><div className="panel-heading"><span className="icon-surface bg-emerald-50 text-emerald-700"><Check className="h-5 w-5" /></span><div><h2>وصل اليوم</h2><p>{receivedItems.length ? "أصناف أُكد وصولها اليوم." : "لم يُعلَّم أي صنف كمستلم بعد."}</p></div></div>{receivedItems.length > 0 && <ul className="mt-5 space-y-3">{receivedItems.map(item => renderItem(item, true))}</ul>}</section>
       </div>
     </section>
   </div>;

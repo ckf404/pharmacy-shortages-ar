@@ -9,6 +9,7 @@ import { useAuth } from "./_core/hooks/useAuth";
 import Login from "./pages/Login";
 import Shortages from "./pages/Shortages";
 import Suppliers from "./pages/Suppliers";
+import Profile from "./pages/Profile";
 import { SettingsPage, UsersPage } from "./pages/Management";
 import { Loader2, ShieldAlert } from "lucide-react";
 import { hasPermission } from "./lib/permissions";
@@ -21,6 +22,7 @@ function Router() {
   if (!user) return <Login />;
   return <DashboardLayout><Switch>
     <Route path="/" component={Shortages} />
+    <Route path="/profile" component={Profile} />
     <Route path="/suppliers">{hasPermission(user, "suppliers_manage") ? <Suppliers /> : <NotAllowed />}</Route>
     <Route path="/users">{hasPermission(user, "users_manage") ? <UsersPage /> : <NotAllowed />}</Route>
     <Route path="/settings">{hasPermission(user, "messages_manage") || hasPermission(user, "settings_manage") || hasPermission(user, "rollover_manage") ? <SettingsPage /> : <NotAllowed />}</Route>

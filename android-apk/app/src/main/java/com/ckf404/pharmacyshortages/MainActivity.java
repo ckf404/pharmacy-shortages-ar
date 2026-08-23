@@ -3,12 +3,15 @@ package com.ckf404.pharmacyshortages;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -16,6 +19,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebSettings;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -23,7 +27,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 public class MainActivity extends Activity {
-    private static final String APP_URL = "https://pharmashrt-lxbcyjhj.manus.space/";
+    private static final String APP_URL = "https://pharmashrt-lxbcyjhj.manus.space/?app=1.2.0";
     private static final int DEEP_TEAL = Color.rgb(17, 52, 64);
     private WebView webView;
     private ProgressBar progressBar;
@@ -33,9 +37,24 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().setStatusBarColor(DEEP_TEAL);
+        getWindow().setNavigationBarColor(DEEP_TEAL);
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(DEEP_TEAL);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            getWindow().setDecorFitsSystemWindows(false);
+            root.setOnApplyWindowInsetsListener((view, windowInsets) -> {
+                Insets bars = windowInsets.getInsets(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                view.setPadding(0, bars.top, 0, bars.bottom);
+                return windowInsets;
+            });
+        } else {
+            root.setOnApplyWindowInsetsListener((view, windowInsets) -> {
+                view.setPadding(0, windowInsets.getSystemWindowInsetTop(), 0, windowInsets.getSystemWindowInsetBottom());
+                return windowInsets;
+            });
+        }
         webView = new WebView(this);
         webView.setBackgroundColor(DEEP_TEAL);
         root.addView(webView, new FrameLayout.LayoutParams(
@@ -64,6 +83,7 @@ public class MainActivity extends Activity {
         webView.getSettings().setDomStorageEnabled(true);
         webView.getSettings().setLoadWithOverviewMode(true);
         webView.getSettings().setUseWideViewPort(true);
+        webView.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
         webView.getSettings().setSupportMultipleWindows(false);
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -92,6 +112,7 @@ public class MainActivity extends Activity {
         });
 
         setContentView(root);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) root.requestApplyInsets();
         loadApp();
     }
 

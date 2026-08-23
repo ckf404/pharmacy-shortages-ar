@@ -15,10 +15,13 @@ import {
   ensureRolloverSettings,
   getAppSettings,
   getActivityLogs,
+  getLocalUserById,
   getLocalUserByUsername,
+  getUserProfile,
   getTodayDashboard,
   listLoginAccounts,
   listAllMessages,
+  listAchievementBoard,
   listSuppliers,
   listUsers,
   listVisibleMessages,
@@ -28,6 +31,7 @@ import {
   setShortageItemStatus,
   softDeleteShortageItem,
   updateAppSettings,
+  updateOwnProfile,
 } from "./db";
 import { normalizeEgyptianWhatsApp } from "./shortagesDomain";
 import { shortageRolloverSettings, users } from "../drizzle/schema";
@@ -75,6 +79,28 @@ export const appRouter = router({
       return {
         success: true,
       } as const;
+    }),
+  }),
+  profile: router({
+    me: protectedProcedure.query(({ ctx }) => getUserProfile(ctx.user.id)),
+    leaderboard: protectedProcedure.query(() => listAchievementBoard()),
+    update: protectedProcedure.input(z.object({
+      name: z.string().trim().min(1).max(128),
+      username: z.string().trim().min(2).max(64).regex(/^[A-Za-z0-9_.-]+$/, "اسم المستخدم يقبل الحروف الإنجليزية والأرقام فقط"),
+      currentPassword: z.string().optional(),
+      newPassword: z.string().min(4).max(128).optional(),
+    })).mutation(async ({ ctx, input }) => {
+      if (input.newPassword) {
+        const current = await getLocalUserById(ctx.user.id);
+        if (!current || !(await verifyPassword(input.currentPassword ?? "", current.passwordHash))) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "كلمة المرور الحالية غير صحيحة" });
+        }
+      }
+      try {
+        return await updateOwnProfile({ userId: ctx.user.id, name: input.name, username: input.username, ...(input.newPassword ? { passwordHash: await hashPassword(input.newPassword) } : {}) });
+      } catch (error) {
+        throw new TRPCError({ code: "CONFLICT", message: error instanceof Error ? error.message : "تعذر تحديث الملف الشخصي" });
+      }
     }),
   }),
   shortages: router({

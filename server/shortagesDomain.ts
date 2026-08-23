@@ -73,8 +73,8 @@ export function buildWhatsAppMessage(input: {
     "",
     "الأصناف المطلوبة:",
     ...input.items.map((item, index) => {
-      const note = item.notes?.trim() ? ` (${item.notes.trim()})` : "";
-      return `${index + 1}. ${item.productName} — ${priorityLabel(item.priority)}${note}`;
+      const priority = item.priority === "normal" ? "" : " — مهم";
+      return `${index + 1}. ${item.productName}${priority}`;
     }),
     "",
     "برجاء تأكيد التوفر وموعد التسليم. شكرًا.",

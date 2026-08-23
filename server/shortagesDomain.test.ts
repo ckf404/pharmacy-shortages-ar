@@ -31,7 +31,8 @@ describe("shortages domain", () => {
       supplierName: "مخزن النور",
       items: [{ productName: "أوجمنتين 1 جم", priority: "urgent", notes: "علبة واحدة" }],
     });
-    expect(message).toContain("1. أوجمنتين 1 جم — عاجل للعميل (علبة واحدة)");
+    expect(message).toContain("1. أوجمنتين 1 جم — مهم");
+    expect(message).not.toContain("علبة واحدة");
     expect(whatsappUrl("201012345678", message)).toContain("https://wa.me/201012345678?text=");
   });
 

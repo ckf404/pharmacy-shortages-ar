@@ -15,6 +15,7 @@ import {
   users,
 } from "../drizzle/schema";
 import { cairoDayKey, previousDayKey, selectRolloverCandidates } from "./shortagesDomain";
+import { achievementLevel } from "./profile";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -90,6 +91,41 @@ export async function getLocalUserByUsername(username: string) {
   const db = await getDb();
   if (!db) return undefined;
   return (await db.select().from(users).where(eq(users.username, username)).limit(1))[0];
+}
+
+export async function getUserProfile(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const user = await getLocalUserById(userId);
+  if (!user || user.deletedAt || !user.active) throw new Error("المستخدم غير موجود أو غير متاح");
+  const [added, received, orders] = await Promise.all([
+    db.select({ count: sql<number>`count(*)` }).from(shortageItems).where(eq(shortageItems.createdByUserId, userId)),
+    db.select({ count: sql<number>`count(*)` }).from(shortageItems).where(and(eq(shortageItems.receivedByUserId, userId), eq(shortageItems.status, "received"))),
+    db.select({ count: sql<number>`count(*)` }).from(shortageSupplierOrders).where(eq(shortageSupplierOrders.createdByUserId, userId)),
+  ]);
+  return {
+    user: { id: user.id, name: user.name, username: user.username, role: user.role, createdAt: user.createdAt },
+    stats: achievementLevel(Number(added[0]?.count ?? 0), Number(received[0]?.count ?? 0), Number(orders[0]?.count ?? 0)),
+  };
+}
+
+export async function listAchievementBoard() {
+  const db = await getDb();
+  if (!db) return [];
+  const activeUsers = await db.select({ id: users.id, name: users.name, role: users.role })
+    .from(users).where(and(eq(users.active, true), isNull(users.deletedAt))).orderBy(users.name);
+  const entries = await Promise.all(activeUsers.map(async user => ({ ...user, ...(await getUserProfile(user.id)).stats })));
+  return entries.sort((a, b) => b.points - a.points || b.orders - a.orders || b.received - a.received).slice(0, 12);
+}
+
+export async function updateOwnProfile(input: { userId: number; name: string; username: string; passwordHash?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const existingUsername = await getLocalUserByUsername(input.username);
+  if (existingUsername && existingUsername.id !== input.userId) throw new Error("اسم المستخدم مستخدم بالفعل");
+  await db.update(users).set({ name: input.name, username: input.username, ...(input.passwordHash ? { passwordHash: input.passwordHash } : {}) }).where(eq(users.id, input.userId));
+  await createAudit("profile_updated", "user", input.userId, input.userId, input.name);
+  return getUserProfile(input.userId);
 }
 
 export async function listLoginAccounts(mode: "user" | "manager") {
