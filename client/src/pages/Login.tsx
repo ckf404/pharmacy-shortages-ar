@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { Building2, KeyRound, Loader2, ShieldCheck, Stethoscope, UserRound } from "lucide-react";
@@ -15,6 +14,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const utils = trpc.useUtils();
   const accounts = trpc.auth.loginAccounts.useQuery({ mode });
+  const accountLabel = mode === "user" ? "المستخدم" : "المشرف";
   const login = trpc.auth.login.useMutation({
     onSuccess: user => {
       utils.auth.me.setData(undefined, user as any);
@@ -64,13 +64,12 @@ export default function Login() {
 
           <form onSubmit={submit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="account">الحساب</Label>
-              <Select value={username} onValueChange={setUsername} disabled={accounts.isLoading || (accounts.data?.length ?? 0) === 0}>
-                <SelectTrigger id="account" className="h-12 bg-white"><SelectValue placeholder={accounts.isLoading ? "جاري تحميل الحسابات…" : "اختر اسم المستخدم"} /></SelectTrigger>
-                <SelectContent>
-                  {accounts.data?.map(account => <SelectItem value={account.username} key={account.id}>{account.name} — {account.username}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="account">{accountLabel}</Label>
+              <select id="account" className="native-login-select" value={username} onChange={event => setUsername(event.target.value)} disabled={accounts.isLoading || (accounts.data?.length ?? 0) === 0}>
+                <option value="">{accounts.isLoading ? "جاري تحميل الحسابات…" : `اختر اسم ${accountLabel}`}</option>
+                {accounts.data?.map(account => <option value={account.username} key={account.id}>{account.name}</option>)}
+              </select>
+              <p className="text-xs leading-5 text-slate-500">{mode === "user" ? "تظهر هنا حسابات المستخدمين العاديين فقط." : "تظهر هنا حسابات المشرفين والمديرين فقط."}</p>
               {!accounts.isLoading && accounts.data?.length === 0 && <p className="text-xs text-amber-700">لا توجد حسابات مفعلة لهذا النوع بعد.</p>}
             </div>
             <div className="space-y-2">
