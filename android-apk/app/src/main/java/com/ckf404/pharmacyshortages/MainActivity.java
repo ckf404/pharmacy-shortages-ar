@@ -138,7 +138,8 @@ public class MainActivity extends Activity {
     }
 
     private boolean openWhatsApp(Uri uri) {
-        Intent whatsapp = new Intent(Intent.ACTION_VIEW, uri);
+        Uri nativeUri = toNativeWhatsAppUri(uri);
+        Intent whatsapp = new Intent(Intent.ACTION_VIEW, nativeUri);
         whatsapp.setPackage("com.whatsapp");
         try {
             startActivity(whatsapp);
@@ -150,6 +151,20 @@ public class MainActivity extends Activity {
             }
         }
         return true;
+    }
+
+    private Uri toNativeWhatsAppUri(Uri source) {
+        if ("whatsapp".equalsIgnoreCase(source.getScheme())) return source;
+        String phone = source.getQueryParameter("phone");
+        if (phone == null || phone.isEmpty()) {
+            java.util.List<String> segments = source.getPathSegments();
+            phone = segments.isEmpty() ? "" : segments.get(0);
+        }
+        String text = source.getQueryParameter("text");
+        Uri.Builder nativeLink = new Uri.Builder().scheme("whatsapp").authority("send");
+        if (!phone.isEmpty()) nativeLink.appendQueryParameter("phone", phone.replaceAll("\\D", ""));
+        if (text != null && !text.isEmpty()) nativeLink.appendQueryParameter("text", text);
+        return nativeLink.build();
     }
 
     private boolean isTrustedAppPage() {
