@@ -45,7 +45,7 @@ export function UsersPage() {
 export function SettingsPage() {
   const { user } = useAuth();
   const [taskUid, setTaskUid] = useState("");
-  const [presentationForm, setPresentationForm] = useState({ appName: "", welcomeText: "", dashboardSubtitle: "", accentColor: "#0f766e", topNotice: "", navigationOrder: "shortages,suppliers,users,settings" });
+  const [presentationForm, setPresentationForm] = useState({ appName: "", pharmacyName: "", pharmacyPhone: "", pharmacyAddress: "", supplierMessageIntro: "طلب نواقص من {pharmacyName} — {date}", supplierMessageFooter: "برجاء تأكيد التوفر وموعد التسليم. شكرًا.", welcomeText: "", dashboardSubtitle: "", accentColor: "#0f766e", topNotice: "", navigationOrder: "shortages,profile,suppliers,users,settings" });
   const [messageForm, setMessageForm] = useState({ title: "", body: "", kind: "info" as "info" | "success" | "warning" | "alert", targetUserId: "all" });
   const utils = trpc.useUtils();
   const rollover = trpc.rollover.settings.useQuery();
@@ -59,7 +59,7 @@ export function SettingsPage() {
   const createMessage = trpc.messages.create.useMutation({ onSuccess: () => { utils.messages.all.invalidate(); utils.messages.inbox.invalidate(); } });
   const archiveMessage = trpc.messages.archive.useMutation({ onSuccess: () => { utils.messages.all.invalidate(); utils.messages.inbox.invalidate(); } });
   useEffect(() => { if (rollover.data) setTaskUid(rollover.data.scheduleCronTaskUid ?? ""); }, [rollover.data]);
-  useEffect(() => { if (presentation.data) setPresentationForm({ appName: presentation.data.appName, welcomeText: presentation.data.welcomeText, dashboardSubtitle: presentation.data.dashboardSubtitle, accentColor: presentation.data.accentColor, topNotice: presentation.data.topNotice ?? "", navigationOrder: presentation.data.navigationOrder ?? "shortages,suppliers,users,settings" }); }, [presentation.data]);
+  useEffect(() => { if (presentation.data) setPresentationForm({ appName: presentation.data.appName, pharmacyName: presentation.data.pharmacyName, pharmacyPhone: presentation.data.pharmacyPhone ?? "", pharmacyAddress: presentation.data.pharmacyAddress ?? "", supplierMessageIntro: presentation.data.supplierMessageIntro, supplierMessageFooter: presentation.data.supplierMessageFooter, welcomeText: presentation.data.welcomeText, dashboardSubtitle: presentation.data.dashboardSubtitle, accentColor: presentation.data.accentColor, topNotice: presentation.data.topNotice ?? "", navigationOrder: presentation.data.navigationOrder ?? "shortages,profile,suppliers,users,settings" }); }, [presentation.data]);
   const canAppearance = hasPermission(user, "settings_manage");
   const canMessages = hasPermission(user, "messages_manage");
   const canRollover = hasPermission(user, "rollover_manage");

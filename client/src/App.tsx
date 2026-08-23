@@ -10,7 +10,8 @@ import Login from "./pages/Login";
 import Shortages from "./pages/Shortages";
 import Suppliers from "./pages/Suppliers";
 import Profile from "./pages/Profile";
-import { SettingsPage, UsersPage } from "./pages/Management";
+import { UsersPage } from "./pages/Management";
+import SettingsPage from "./pages/SettingsPage";
 import { Loader2, ShieldAlert } from "lucide-react";
 import { hasPermission } from "./lib/permissions";
 

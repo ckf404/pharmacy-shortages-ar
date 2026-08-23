@@ -2,8 +2,18 @@ export type ShortagePriority = "normal" | "important" | "urgent";
 
 export type WhatsAppItem = {
   productName: string;
+  dosageForm?: string | null;
+  quantity?: number | null;
   priority: ShortagePriority;
   notes?: string | null;
+};
+
+export type WhatsAppMessageSettings = {
+  pharmacyName?: string | null;
+  pharmacyPhone?: string | null;
+  pharmacyAddress?: string | null;
+  supplierMessageIntro?: string | null;
+  supplierMessageFooter?: string | null;
 };
 
 export type RolloverSource = { id: number; status: string };
@@ -66,18 +76,27 @@ export function buildWhatsAppMessage(input: {
   dayKey: string;
   supplierName: string;
   items: WhatsAppItem[];
+  settings?: WhatsAppMessageSettings;
 }) {
+  const pharmacyName = input.settings?.pharmacyName?.trim() || "الصيدلية";
+  const introTemplate = input.settings?.supplierMessageIntro?.trim() || "طلب نواقص من {pharmacyName} — {date}";
+  const intro = introTemplate.replaceAll("{pharmacyName}", pharmacyName).replaceAll("{date}", input.dayKey).replaceAll("{supplierName}", input.supplierName);
+  const footer = input.settings?.supplierMessageFooter?.trim() || "برجاء تأكيد التوفر وموعد التسليم. شكرًا.";
   const lines = [
-    `طلب نواقص الصيدلية — ${input.dayKey}`,
+    intro,
     `المخزن: ${input.supplierName}`,
+    ...(input.settings?.pharmacyPhone?.trim() ? [`هاتف الصيدلية: ${input.settings.pharmacyPhone.trim()}`] : []),
+    ...(input.settings?.pharmacyAddress?.trim() ? [`العنوان: ${input.settings.pharmacyAddress.trim()}`] : []),
     "",
     "الأصناف المطلوبة:",
     ...input.items.map((item, index) => {
       const priority = item.priority === "normal" ? "" : " — مهم";
-      return `${index + 1}. ${item.productName}${priority}`;
+      const form = item.dosageForm?.trim() ? ` — ${item.dosageForm.trim()}` : "";
+      const quantity = item.quantity && item.quantity > 1 ? ` × ${item.quantity}` : "";
+      return `${index + 1}. ${item.productName}${form}${quantity}${priority}`;
     }),
     "",
-    "برجاء تأكيد التوفر وموعد التسليم. شكرًا.",
+    footer,
   ];
 
   return lines.join("\n");

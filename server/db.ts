@@ -185,9 +185,17 @@ export async function getTodayDashboard(dayKey = cairoDayKey()) {
   const db = await getDb();
   if (!db) throw new Error("قاعدة البيانات غير متاحة");
   const day = await getOrCreateShortageDay(dayKey);
-  const items = await db.select({
+  return { day, items: await listInvoiceItems(day.id) };
+}
+
+async function listInvoiceItems(shortageDayId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  return db.select({
     id: shortageItems.id,
     productName: shortageItems.productName,
+    dosageForm: shortageItems.dosageForm,
+    quantity: shortageItems.quantity,
     priority: shortageItems.priority,
     status: shortageItems.status,
     notes: shortageItems.notes,
@@ -197,13 +205,46 @@ export async function getTodayDashboard(dayKey = cairoDayKey()) {
     createdAt: shortageItems.createdAt,
   }).from(shortageItems)
     .leftJoin(shortageSuppliers, eq(shortageItems.suggestedSupplierId, shortageSuppliers.id))
-    .where(and(eq(shortageItems.shortageDayId, day.id), inArray(shortageItems.status, ["open", "received"])))
+    .where(and(eq(shortageItems.shortageDayId, shortageDayId), inArray(shortageItems.status, ["open", "received"])))
     .orderBy(desc(shortageItems.createdAt));
-  return { day, items };
+}
+
+export async function getShortageDayInvoice(dayKey: string) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const day = (await db.select().from(shortageDays).where(eq(shortageDays.dayKey, dayKey)).limit(1))[0];
+  if (!day) throw new Error("فاتورة هذا اليوم غير موجودة");
+  return { day, items: await listInvoiceItems(day.id) };
+}
+
+export async function listShortageDayArchive(limit = 31) {
+  const db = await getDb();
+  if (!db) return [];
+  const days = await db.select({ id: shortageDays.id, dayKey: shortageDays.dayKey, createdAt: shortageDays.createdAt })
+    .from(shortageDays).orderBy(desc(shortageDays.dayKey)).limit(limit);
+  if (days.length === 0) return [];
+  const summaries = await db.select({
+    shortageDayId: shortageItems.shortageDayId,
+    itemCount: sql<number>`count(*)`,
+    openCount: sql<number>`sum(case when ${shortageItems.status} = 'open' then 1 else 0 end)`,
+    receivedCount: sql<number>`sum(case when ${shortageItems.status} = 'received' then 1 else 0 end)`,
+  }).from(shortageItems).where(inArray(shortageItems.shortageDayId, days.map(day => day.id))).groupBy(shortageItems.shortageDayId);
+  const summaryByDay = new Map(summaries.map(summary => [summary.shortageDayId, summary]));
+  return days.map(day => {
+    const summary = summaryByDay.get(day.id);
+    return {
+      ...day,
+      itemCount: Number(summary?.itemCount ?? 0),
+      openCount: Number(summary?.openCount ?? 0),
+      receivedCount: Number(summary?.receivedCount ?? 0),
+    };
+  });
 }
 
 export async function createShortageItem(input: {
   productName: string;
+  dosageForm: "أقراص" | "شراب" | "مرهم" | "نقط" | "كريم";
+  quantity: number;
   priority: "normal" | "important" | "urgent";
   notes?: string | null;
   suggestedSupplierId?: number | null;
@@ -294,6 +335,11 @@ export async function getAppSettings() {
 
 export async function updateAppSettings(input: {
   appName: string;
+  pharmacyName: string;
+  pharmacyPhone?: string | null;
+  pharmacyAddress?: string | null;
+  supplierMessageIntro: string;
+  supplierMessageFooter: string;
   welcomeText: string;
   dashboardSubtitle: string;
   accentColor: string;
@@ -306,6 +352,11 @@ export async function updateAppSettings(input: {
   await getAppSettings();
   await db.update(appSettings).set({
     appName: input.appName,
+    pharmacyName: input.pharmacyName,
+    pharmacyPhone: input.pharmacyPhone ?? null,
+    pharmacyAddress: input.pharmacyAddress ?? null,
+    supplierMessageIntro: input.supplierMessageIntro,
+    supplierMessageFooter: input.supplierMessageFooter,
     welcomeText: input.welcomeText,
     dashboardSubtitle: input.dashboardSubtitle,
     accentColor: input.accentColor,
@@ -388,7 +439,8 @@ export async function createSupplierOrder(input: { supplierId: number; itemIds: 
   const items = await db.select().from(shortageItems).where(and(eq(shortageItems.shortageDayId, day.id), eq(shortageItems.status, "open"), inArray(shortageItems.id, input.itemIds)));
   if (items.length !== input.itemIds.length) throw new Error("تأكد من أن كل الأصناف المختارة مفتوحة ومن قائمة اليوم");
   const { buildWhatsAppMessage, whatsappUrl } = await import("./shortagesDomain");
-  const messageText = buildWhatsAppMessage({ dayKey: day.dayKey, supplierName: supplier.name, items });
+  const settings = await getAppSettings();
+  const messageText = buildWhatsAppMessage({ dayKey: day.dayKey, supplierName: supplier.name, items, settings });
   const url = whatsappUrl(supplier.whatsappNumber, messageText);
   const result = await db.insert(shortageSupplierOrders).values({ supplierId: supplier.id, shortageDayId: day.id, messageText, whatsappUrl: url, createdByUserId: input.createdByUserId });
   const orderId = Number(result[0].insertId);
@@ -438,6 +490,8 @@ export async function rolloverOpenShortages(targetDayKey = cairoDayKey()) {
       await tx.insert(shortageItems).values(pending.map(source => ({
         shortageDayId: targetDay.id,
         productName: source.productName,
+        dosageForm: source.dosageForm,
+        quantity: source.quantity,
         priority: source.priority,
         status: "open" as const,
         notes: source.notes,

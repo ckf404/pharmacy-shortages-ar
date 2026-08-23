@@ -29,10 +29,13 @@ describe("shortages domain", () => {
     const message = buildWhatsAppMessage({
       dayKey: "2026-08-23",
       supplierName: "مخزن النور",
-      items: [{ productName: "أوجمنتين 1 جم", priority: "urgent", notes: "علبة واحدة" }],
+      items: [{ productName: "أوجمنتين 1 جم", dosageForm: "أقراص", quantity: 2, priority: "urgent", notes: "علبة واحدة" }],
+      settings: { pharmacyName: "صيدلية فارس", supplierMessageIntro: "طلب {pharmacyName} بتاريخ {date}", supplierMessageFooter: "في الانتظار" },
     });
-    expect(message).toContain("1. أوجمنتين 1 جم — مهم");
+    expect(message).toContain("طلب صيدلية فارس بتاريخ 2026-08-23");
+    expect(message).toContain("1. أوجمنتين 1 جم — أقراص × 2 — مهم");
     expect(message).not.toContain("علبة واحدة");
+    expect(message).toContain("في الانتظار");
     expect(whatsappUrl("201012345678", message)).toContain("https://wa.me/201012345678?text=");
   });
 
@@ -45,5 +48,13 @@ describe("shortages domain", () => {
     ];
     expect(selectRolloverCandidates(sources, [14])).toEqual([{ id: 11, status: "open" }]);
     expect(selectRolloverCandidates(sources, [11, 14])).toEqual([]);
+  });
+
+  it("keeps received items in their original dated invoice instead of rolling them into a new one", () => {
+    const previousInvoice = [
+      { id: 21, status: "open" },
+      { id: 22, status: "received" },
+    ];
+    expect(selectRolloverCandidates(previousInvoice, [])).toEqual([{ id: 21, status: "open" }]);
   });
 });
