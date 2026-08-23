@@ -6,6 +6,13 @@ export type WhatsAppItem = {
   notes?: string | null;
 };
 
+export type RolloverSource = { id: number; status: string };
+
+export function selectRolloverCandidates<T extends RolloverSource>(items: T[], existingSourceIds: Iterable<number | null>) {
+  const alreadyCopied = new Set(Array.from(existingSourceIds).filter((id): id is number => typeof id === "number"));
+  return items.filter(item => item.status === "open" && !alreadyCopied.has(item.id));
+}
+
 const cairoParts = (date: Date) => {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Africa/Cairo",

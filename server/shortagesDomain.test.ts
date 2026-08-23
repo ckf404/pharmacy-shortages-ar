@@ -5,6 +5,7 @@ import {
   isCairoMidnight,
   normalizeEgyptianWhatsApp,
   previousDayKey,
+  selectRolloverCandidates,
   whatsappUrl,
 } from "./shortagesDomain";
 
@@ -32,5 +33,16 @@ describe("shortages domain", () => {
     });
     expect(message).toContain("1. أوجمنتين 1 جم — عاجل للعميل (علبة واحدة)");
     expect(whatsappUrl("201012345678", message)).toContain("https://wa.me/201012345678?text=");
+  });
+
+  it("selects open shortages only and remains safe when a previous run already copied items", () => {
+    const sources = [
+      { id: 11, status: "open" },
+      { id: 12, status: "received" },
+      { id: 13, status: "deleted" },
+      { id: 14, status: "open" },
+    ];
+    expect(selectRolloverCandidates(sources, [14])).toEqual([{ id: 11, status: "open" }]);
+    expect(selectRolloverCandidates(sources, [11, 14])).toEqual([]);
   });
 });

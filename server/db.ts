@@ -11,7 +11,7 @@ import {
   shortageSuppliers,
   users,
 } from "../drizzle/schema";
-import { cairoDayKey, previousDayKey } from "./shortagesDomain";
+import { cairoDayKey, previousDayKey, selectRolloverCandidates } from "./shortagesDomain";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -271,12 +271,11 @@ export async function rolloverOpenShortages(targetDayKey = cairoDayKey()) {
     const targetDay = (await tx.select().from(shortageDays).where(eq(shortageDays.dayKey, targetDayKey)).limit(1))[0]!;
     const sourceDay = (await tx.select().from(shortageDays).where(eq(shortageDays.dayKey, sourceDayKey)).limit(1))[0];
     if (!sourceDay) return { sourceDayKey, targetDayKey, copied: 0 };
-    const sources = await tx.select().from(shortageItems).where(and(eq(shortageItems.shortageDayId, sourceDay.id), eq(shortageItems.status, "open")));
+    const sources = await tx.select().from(shortageItems).where(eq(shortageItems.shortageDayId, sourceDay.id));
     if (sources.length === 0) return { sourceDayKey, targetDayKey, copied: 0 };
     const existing = await tx.select({ sourceId: shortageItems.rolloverSourceItemId }).from(shortageItems)
       .where(and(eq(shortageItems.shortageDayId, targetDay.id), inArray(shortageItems.rolloverSourceItemId, sources.map(source => source.id))));
-    const existingIds = new Set(existing.map(row => row.sourceId));
-    const pending = sources.filter(source => !existingIds.has(source.id));
+    const pending = selectRolloverCandidates(sources, existing.map(row => row.sourceId));
     if (pending.length > 0) {
       await tx.insert(shortageItems).values(pending.map(source => ({
         shortageDayId: targetDay.id,
