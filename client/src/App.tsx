@@ -3,19 +3,29 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import DashboardLayout from "./components/DashboardLayout";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
+import { useAuth } from "./_core/hooks/useAuth";
+import Login from "./pages/Login";
+import Shortages from "./pages/Shortages";
+import Suppliers from "./pages/Suppliers";
+import { SettingsPage, UsersPage } from "./pages/Management";
+import { Loader2, ShieldAlert } from "lucide-react";
+
+function NotAllowed() { return <div className="panel flex min-h-72 flex-col items-center justify-center text-center"><ShieldAlert className="h-9 w-9 text-amber-600" /><h1 className="mt-4 text-xl font-bold">لا تملك صلاحية الوصول لهذه الصفحة</h1><p className="mt-2 text-sm text-slate-500">اطلب من مدير النظام تعديل دور حسابك عند الحاجة.</p></div>; }
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
-  return (
-    <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
-      <Route component={NotFound} />
-    </Switch>
-  );
+  const { user, loading } = useAuth();
+  if (loading) return <div className="page-loader min-h-screen"><Loader2 className="h-6 w-6 animate-spin" />جاري التحقق من الدخول…</div>;
+  if (!user) return <Login />;
+  return <DashboardLayout><Switch>
+    <Route path="/" component={Shortages} />
+    <Route path="/suppliers">{user.role === "user" ? <NotAllowed /> : <Suppliers />}</Route>
+    <Route path="/users">{user.role === "admin" ? <UsersPage /> : <NotAllowed />}</Route>
+    <Route path="/settings">{user.role === "user" ? <NotAllowed /> : <SettingsPage />}</Route>
+    <Route path="/404" component={NotFound} />
+    <Route component={NotFound} />
+  </Switch></DashboardLayout>;
 }
 
 // NOTE: About Theme
@@ -26,10 +36,7 @@ function Router() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
+      <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
           <Router />
