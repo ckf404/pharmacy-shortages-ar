@@ -2,6 +2,8 @@ package com.ckf404.pharmacyshortages;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Insets;
 import android.graphics.drawable.ColorDrawable;
@@ -96,6 +98,15 @@ public class MainActivity extends Activity {
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
                 String host = uri.getHost();
+                if (isWhatsAppLink(uri)) return openWhatsApp(uri);
+                if ("intent".equals(uri.getScheme())) {
+                    try {
+                        startActivity(Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME));
+                        return true;
+                    } catch (Exception ignored) {
+                        return true;
+                    }
+                }
                 if (host != null && host.endsWith("manus.space")) return false;
                 return !"https".equals(uri.getScheme());
             }
@@ -114,6 +125,29 @@ public class MainActivity extends Activity {
         setContentView(root);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) root.requestApplyInsets();
         loadApp();
+    }
+
+    private boolean isWhatsAppLink(Uri uri) {
+        String host = uri.getHost();
+        return "whatsapp".equalsIgnoreCase(uri.getScheme())
+                || "wa.me".equalsIgnoreCase(host)
+                || "api.whatsapp.com".equalsIgnoreCase(host)
+                || "web.whatsapp.com".equalsIgnoreCase(host);
+    }
+
+    private boolean openWhatsApp(Uri uri) {
+        Intent whatsapp = new Intent(Intent.ACTION_VIEW, uri);
+        whatsapp.setPackage("com.whatsapp");
+        try {
+            startActivity(whatsapp);
+        } catch (ActivityNotFoundException notInstalled) {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, uri));
+            } catch (ActivityNotFoundException ignored) {
+                // The link is intentionally consumed here so the WebView never replaces the pharmacy screen.
+            }
+        }
+        return true;
     }
 
     private View buildErrorPanel() {
