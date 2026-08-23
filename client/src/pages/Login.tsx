@@ -14,6 +14,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const utils = trpc.useUtils();
   const accounts = trpc.auth.loginAccounts.useQuery({ mode });
+  const presentation = trpc.presentation.get.useQuery();
   const accountLabel = mode === "user" ? "المستخدم" : "المشرف";
   const login = trpc.auth.login.useMutation({
     onSuccess: user => {
@@ -31,12 +32,12 @@ export default function Login() {
   };
 
   return (
-    <main className="login-shell min-h-screen overflow-hidden px-4 py-8 sm:px-8">
+    <main className="login-shell min-h-screen overflow-hidden px-4 py-8 sm:px-8" style={{ "--app-accent": presentation.data?.accentColor ?? "#0f766e" } as React.CSSProperties}>
       <div className="mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-6xl items-center gap-8 lg:grid-cols-2 lg:gap-12">
         <section className="hidden min-w-0 text-white lg:block">
           <div className="mb-10 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/12 ring-1 ring-white/15"><Stethoscope className="h-7 w-7" /></div>
-          <p className="mb-4 text-sm font-semibold tracking-[.25em] text-emerald-200">نواقص الصيدلية</p>
-          <h1 className="max-w-xl text-3xl font-bold leading-[1.65] xl:text-4xl">كل نقص، وكل مخزن، في قائمة يومية واضحة.</h1>
+          <p className="mb-4 text-sm font-semibold tracking-[.25em] text-emerald-200">{presentation.data?.appName ?? "نواقص الصيدلية"}</p>
+          <h1 className="max-w-xl text-3xl font-bold leading-[1.65] xl:text-4xl">{presentation.data?.welcomeText ?? "كل نقص، وكل مخزن، في قائمة يومية واضحة."}</h1>
           <p className="mt-5 max-w-lg text-lg leading-8 text-slate-200">سجّل الدواء الناقص، حدّد أهميته، علِّم عليه عند وصوله، وجهّز طلبًا منظمًا للمخزن عبر واتساب للمراجعة والإرسال منك.</p>
           <div className="mt-10 grid max-w-lg grid-cols-3 gap-3 text-center text-xs text-slate-200">
             <div className="rounded-xl border border-white/10 bg-white/5 p-4"><ShieldCheck className="mx-auto mb-2 h-5 w-5 text-emerald-200" />صلاحيات واضحة</div>
@@ -48,7 +49,7 @@ export default function Login() {
         <section className="mx-auto w-full max-w-md min-w-0 rounded-[1.75rem] border border-white/60 bg-white/95 p-6 shadow-2xl shadow-slate-950/30 backdrop-blur sm:p-8">
           <div className="mb-8 text-center lg:text-right">
             <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-50 text-teal-700 lg:hidden"><Stethoscope className="h-6 w-6" /></div>
-            <p className="text-sm font-bold text-teal-700">نواقص الصيدلية</p>
+            <p className="login-brand text-sm font-bold">{presentation.data?.appName ?? "نواقص الصيدلية"}</p>
             <h2 className="mt-2 text-2xl font-bold text-slate-900">تسجيل الدخول</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">اختر نوع الحساب ثم اسم المستخدم من القائمة.</p>
           </div>

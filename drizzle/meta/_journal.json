@@ -15,6 +15,13 @@
       "when": 1787495091630,
       "tag": "0001_flat_tarot",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1787503781188,
+      "tag": "0002_fearless_nehzno",
+      "breakpoints": true
     }
   ]
 }

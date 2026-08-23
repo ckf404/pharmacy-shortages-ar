@@ -11,6 +11,8 @@ export const users = mysqlTable("users", {
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "supervisor", "admin"]).default("user").notNull(),
   active: boolean("active").default(true).notNull(),
+  permissions: text("permissions"),
+  deletedAt: timestamp("deletedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn"),
@@ -32,6 +34,7 @@ export const shortageSuppliers = mysqlTable("shortage_suppliers", {
   whatsappNumber: varchar("whatsappNumber", { length: 16 }).notNull(),
   notes: text("notes"),
   active: boolean("active").default(true).notNull(),
+  deletedAt: timestamp("deletedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [index("shortage_suppliers_active_index").on(table.active)]);
@@ -105,6 +108,44 @@ export const shortageActivityLogs = mysqlTable("shortage_activity_logs", {
 }, table => [
   index("shortage_activity_entity_index").on(table.entityType, table.entityId),
   index("shortage_activity_created_index").on(table.createdAt),
+]);
+
+export const appSettings = mysqlTable("app_settings", {
+  id: int("id").primaryKey(),
+  appName: varchar("appName", { length: 120 }).notNull().default("نواقص الصيدلية"),
+  welcomeText: varchar("welcomeText", { length: 255 }).notNull().default("كل نقص، وكل مخزن، في قائمة يومية واضحة."),
+  dashboardSubtitle: varchar("dashboardSubtitle", { length: 255 }).notNull().default("تابع حالة الصنف من التسجيل حتى الاستلام دون فقدان سجل اليوم."),
+  accentColor: varchar("accentColor", { length: 16 }).notNull().default("#0f766e"),
+  topNotice: varchar("topNotice", { length: 255 }),
+  navigationOrder: text("navigationOrder"),
+  updatedByUserId: int("updatedByUserId").references(() => users.id),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const appMessages = mysqlTable("app_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 180 }).notNull(),
+  body: text("body").notNull(),
+  kind: mysqlEnum("kind", ["info", "success", "warning", "alert"]).default("info").notNull(),
+  targetUserId: int("targetUserId").references(() => users.id),
+  active: boolean("active").default(true).notNull(),
+  expiresAt: timestamp("expiresAt"),
+  createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("app_messages_target_active_index").on(table.targetUserId, table.active),
+  index("app_messages_created_index").on(table.createdAt),
+]);
+
+export const appMessageReads = mysqlTable("app_message_reads", {
+  id: int("id").autoincrement().primaryKey(),
+  messageId: int("messageId").notNull().references(() => appMessages.id),
+  userId: int("userId").notNull().references(() => users.id),
+  readAt: timestamp("readAt").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("app_message_reads_message_user_unique").on(table.messageId, table.userId),
+  index("app_message_reads_user_index").on(table.userId),
 ]);
 
 export type User = typeof users.$inferSelect;

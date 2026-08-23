@@ -1,7 +1,10 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
+  appMessageReads,
+  appMessages,
+  appSettings,
   shortageActivityLogs,
   shortageDays,
   shortageItems,
@@ -108,6 +111,8 @@ export async function listUsers() {
     username: users.username,
     role: users.role,
     active: users.active,
+    permissions: users.permissions,
+    deletedAt: users.deletedAt,
     createdAt: users.createdAt,
     lastSignedIn: users.lastSignedIn,
   }).from(users).orderBy(users.name);
@@ -203,7 +208,7 @@ export async function listSuppliers(includeInactive = true) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(shortageSuppliers)
-    .where(includeInactive ? undefined : eq(shortageSuppliers.active, true))
+    .where(includeInactive ? isNull(shortageSuppliers.deletedAt) : and(isNull(shortageSuppliers.deletedAt), eq(shortageSuppliers.active, true)))
     .orderBy(shortageSuppliers.name);
 }
 
@@ -219,6 +224,123 @@ export async function saveSupplier(input: { id?: number; name: string; whatsappN
   const id = Number(result[0].insertId);
   await createAudit("supplier_created", "supplier", id, actorUserId, input.name);
   return id;
+}
+
+export async function deleteSupplier(supplierId: number, actorUserId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const supplier = (await db.select().from(shortageSuppliers).where(eq(shortageSuppliers.id, supplierId)).limit(1))[0];
+  if (!supplier || supplier.deletedAt) throw new Error("المخزن غير موجود");
+  await db.update(shortageSuppliers).set({ active: false, deletedAt: new Date() }).where(eq(shortageSuppliers.id, supplierId));
+  await createAudit("supplier_deleted", "supplier", supplierId, actorUserId, supplier.name);
+}
+
+export async function deleteUserSafely(userId: number, actorUserId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  if (userId === actorUserId) throw new Error("لا يمكن حذف حسابك الحالي");
+  const target = (await db.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+  if (!target || target.deletedAt) throw new Error("المستخدم غير موجود");
+  if (target.role === "admin") {
+    const activeAdmins = await db.select({ id: users.id }).from(users).where(and(eq(users.role, "admin"), eq(users.active, true), isNull(users.deletedAt)));
+    if (activeAdmins.length <= 1) throw new Error("لا يمكن حذف المدير الوحيد للنظام");
+  }
+  await db.update(users).set({ active: false, deletedAt: new Date() }).where(eq(users.id, userId));
+  await createAudit("user_deleted", "user", userId, actorUserId, target.name);
+}
+
+export async function getAppSettings() {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  await db.insert(appSettings).values({ id: 1 }).onDuplicateKeyUpdate({ set: { id: sql`id` } });
+  return (await db.select().from(appSettings).where(eq(appSettings.id, 1)).limit(1))[0]!;
+}
+
+export async function updateAppSettings(input: {
+  appName: string;
+  welcomeText: string;
+  dashboardSubtitle: string;
+  accentColor: string;
+  topNotice?: string | null;
+  navigationOrder?: string | null;
+  actorUserId: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  await getAppSettings();
+  await db.update(appSettings).set({
+    appName: input.appName,
+    welcomeText: input.welcomeText,
+    dashboardSubtitle: input.dashboardSubtitle,
+    accentColor: input.accentColor,
+    topNotice: input.topNotice ?? null,
+    navigationOrder: input.navigationOrder ?? null,
+    updatedByUserId: input.actorUserId,
+  }).where(eq(appSettings.id, 1));
+  await createAudit("app_settings_updated", "app_settings", 1, input.actorUserId, input.appName);
+  return getAppSettings();
+}
+
+export async function listVisibleMessages(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: appMessages.id,
+    title: appMessages.title,
+    body: appMessages.body,
+    kind: appMessages.kind,
+    targetUserId: appMessages.targetUserId,
+    createdAt: appMessages.createdAt,
+    expiresAt: appMessages.expiresAt,
+    readAt: appMessageReads.readAt,
+  }).from(appMessages)
+    .leftJoin(appMessageReads, and(eq(appMessageReads.messageId, appMessages.id), eq(appMessageReads.userId, userId)))
+    .where(and(eq(appMessages.active, true), or(isNull(appMessages.targetUserId), eq(appMessages.targetUserId, userId)), or(isNull(appMessages.expiresAt), gt(appMessages.expiresAt, new Date()))))
+    .orderBy(desc(appMessages.createdAt));
+}
+
+export async function listAllMessages() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: appMessages.id,
+    title: appMessages.title,
+    body: appMessages.body,
+    kind: appMessages.kind,
+    targetUserId: appMessages.targetUserId,
+    targetUserName: users.name,
+    active: appMessages.active,
+    createdAt: appMessages.createdAt,
+  }).from(appMessages).leftJoin(users, eq(appMessages.targetUserId, users.id)).orderBy(desc(appMessages.createdAt));
+}
+
+export async function createAppMessage(input: {
+  title: string;
+  body: string;
+  kind: "info" | "success" | "warning" | "alert";
+  targetUserId?: number | null;
+  expiresAt?: Date | null;
+  createdByUserId: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const result = await db.insert(appMessages).values({ ...input, targetUserId: input.targetUserId ?? null, expiresAt: input.expiresAt ?? null });
+  const id = Number(result[0].insertId);
+  await createAudit("message_created", "app_message", id, input.createdByUserId, input.title);
+  return id;
+}
+
+export async function markMessageRead(messageId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  await db.insert(appMessageReads).values({ messageId, userId }).onDuplicateKeyUpdate({ set: { readAt: new Date() } });
+}
+
+export async function archiveAppMessage(messageId: number, actorUserId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  await db.update(appMessages).set({ active: false }).where(eq(appMessages.id, messageId));
+  await createAudit("message_archived", "app_message", messageId, actorUserId);
 }
 
 export async function createSupplierOrder(input: { supplierId: number; itemIds: number[]; createdByUserId: number }) {

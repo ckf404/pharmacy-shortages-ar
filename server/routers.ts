@@ -1,32 +1,42 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { createLocalSession, hashPassword, verifyPassword } from "./localAuth";
 import {
+  archiveAppMessage,
+  createAppMessage,
   createShortageItem,
   createSupplierOrder,
+  deleteSupplier,
+  deleteUserSafely,
   ensureRolloverSettings,
+  getAppSettings,
   getActivityLogs,
   getLocalUserByUsername,
   getTodayDashboard,
   listLoginAccounts,
+  listAllMessages,
   listSuppliers,
   listUsers,
+  listVisibleMessages,
+  markMessageRead,
   rolloverOpenShortages,
   saveSupplier,
   setShortageItemStatus,
   softDeleteShortageItem,
+  updateAppSettings,
 } from "./db";
 import { normalizeEgyptianWhatsApp } from "./shortagesDomain";
 import { shortageRolloverSettings, users } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { getDb } from "./db";
+import { canUsePermission, permissionKeys, serializePermissions, type PermissionKey } from "./permissions";
 
-const managerProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (ctx.user.role === "user") throw new TRPCError({ code: "FORBIDDEN", message: "هذه العملية متاحة للمشرفين والمديرين فقط" });
+const permissionProcedure = (permission: PermissionKey) => protectedProcedure.use(({ ctx, next }) => {
+  if (!canUsePermission(ctx.user, permission)) throw new TRPCError({ code: "FORBIDDEN", message: "ليست لديك صلاحية لتنفيذ هذه العملية. تواصل مع المشرف لتفعيلها." });
   return next();
 });
 
@@ -36,6 +46,7 @@ const publicUser = (user: NonNullable<typeof users.$inferSelect>) => ({
   username: user.username,
   role: user.role,
   active: user.active,
+  permissions: user.permissions,
 });
 
 export const appRouter = router({
@@ -68,44 +79,49 @@ export const appRouter = router({
   }),
   shortages: router({
     dashboard: protectedProcedure.query(() => getTodayDashboard()),
-    create: protectedProcedure.input(z.object({
+    create: permissionProcedure("shortages_create").input(z.object({
       productName: z.string().trim().min(1).max(255),
       priority: z.enum(["normal", "important", "urgent"]),
       suggestedSupplierId: z.number().int().positive().nullable().optional(),
       notes: z.string().trim().max(1000).nullable().optional(),
     })).mutation(({ ctx, input }) => createShortageItem({ ...input, createdByUserId: ctx.user.id })),
-    setStatus: protectedProcedure.input(z.object({ id: z.number().int().positive(), status: z.enum(["open", "received"]) }))
+    setStatus: permissionProcedure("shortages_update").input(z.object({ id: z.number().int().positive(), status: z.enum(["open", "received"]) }))
       .mutation(({ ctx, input }) => setShortageItemStatus(input.id, input.status, ctx.user.id)),
-    delete: protectedProcedure.input(z.object({ id: z.number().int().positive() }))
+    delete: permissionProcedure("shortages_delete").input(z.object({ id: z.number().int().positive() }))
       .mutation(({ ctx, input }) => softDeleteShortageItem(input.id, ctx.user.id)),
-    prepareWhatsApp: protectedProcedure.input(z.object({ supplierId: z.number().int().positive(), itemIds: z.array(z.number().int().positive()).min(1) }))
+    prepareWhatsApp: permissionProcedure("orders_prepare").input(z.object({ supplierId: z.number().int().positive(), itemIds: z.array(z.number().int().positive()).min(1) }))
       .mutation(({ ctx, input }) => createSupplierOrder({ ...input, createdByUserId: ctx.user.id })),
-    activity: protectedProcedure.query(() => getActivityLogs()),
+    activity: permissionProcedure("activity_view").query(() => getActivityLogs()),
   }),
   suppliers: router({
     list: protectedProcedure.query(() => listSuppliers()),
-    save: managerProcedure.input(z.object({
+    save: permissionProcedure("suppliers_manage").input(z.object({
       id: z.number().int().positive().optional(),
       name: z.string().trim().min(1).max(160),
       whatsappNumber: z.string().trim().min(7).max(32),
       notes: z.string().trim().max(1000).nullable().optional(),
       active: z.boolean().default(true),
     })).mutation(({ ctx, input }) => saveSupplier({ ...input, whatsappNumber: normalizeEgyptianWhatsApp(input.whatsappNumber) }, ctx.user.id)),
+    delete: permissionProcedure("suppliers_delete").input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => deleteSupplier(input.id, ctx.user.id)),
   }),
   management: router({
-    users: adminProcedure.query(() => listUsers()),
-    saveUser: adminProcedure.input(z.object({
+    users: permissionProcedure("users_manage").query(() => listUsers()),
+    saveUser: permissionProcedure("users_manage").input(z.object({
       id: z.number().int().positive().optional(),
       name: z.string().trim().min(1).max(128),
       username: z.string().trim().min(2).max(64).regex(/^[A-Za-z0-9_.-]+$/, "اسم المستخدم يقبل الحروف الإنجليزية والأرقام فقط"),
       role: z.enum(["user", "supervisor", "admin"]),
       active: z.boolean().default(true),
       password: z.string().optional(),
+      permissions: z.array(z.enum(permissionKeys)).default([]),
     })).mutation(async ({ ctx, input }) => {
+      if (ctx.user.role !== "admin" && input.role === "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "إنشاء أو ترقية مدير النظام متاح للمدير فقط" });
+      }
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
       if (!input.id && !input.password) throw new TRPCError({ code: "BAD_REQUEST", message: "كلمة المرور مطلوبة للحساب الجديد" });
-      const values = { name: input.name, username: input.username, role: input.role, active: input.active } as const;
+      const values = { name: input.name, username: input.username, role: input.role, active: input.active, permissions: serializePermissions(input.permissions) } as const;
       if (input.id) {
         await db.update(users).set({ ...values, ...(input.password !== undefined ? { passwordHash: await hashPassword(input.password) } : {}) }).where(eq(users.id, input.id));
         return input.id;
@@ -113,23 +129,47 @@ export const appRouter = router({
       const result = await db.insert(users).values({ ...values, passwordHash: await hashPassword(input.password!) });
       return Number(result[0].insertId);
     }),
-    resetPassword: adminProcedure.input(z.object({ id: z.number().int().positive(), password: z.string() }))
+    resetPassword: permissionProcedure("users_manage").input(z.object({ id: z.number().int().positive(), password: z.string() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
         await db.update(users).set({ passwordHash: await hashPassword(input.password) }).where(eq(users.id, input.id));
       }),
+    deleteUser: permissionProcedure("users_manage").input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => deleteUserSafely(input.id, ctx.user.id)),
+  }),
+  presentation: router({
+    get: publicProcedure.query(() => getAppSettings()),
+    update: permissionProcedure("settings_manage").input(z.object({
+      appName: z.string().trim().min(1).max(120),
+      welcomeText: z.string().trim().min(1).max(255),
+      dashboardSubtitle: z.string().trim().min(1).max(255),
+      accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "اختر لونًا بصيغة #RRGGBB"),
+      topNotice: z.string().trim().max(255).nullable().optional(),
+      navigationOrder: z.string().max(1000).nullable().optional(),
+    })).mutation(({ ctx, input }) => updateAppSettings({ ...input, actorUserId: ctx.user.id })),
+  }),
+  messages: router({
+    inbox: protectedProcedure.query(({ ctx }) => listVisibleMessages(ctx.user.id)),
+    read: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => markMessageRead(input.id, ctx.user.id)),
+    all: permissionProcedure("messages_manage").query(() => listAllMessages()),
+    create: permissionProcedure("messages_manage").input(z.object({
+      title: z.string().trim().min(1).max(180),
+      body: z.string().trim().min(1).max(2000),
+      kind: z.enum(["info", "success", "warning", "alert"]),
+      targetUserId: z.number().int().positive().nullable().optional(),
+    })).mutation(({ ctx, input }) => createAppMessage({ ...input, createdByUserId: ctx.user.id })),
+    archive: permissionProcedure("messages_manage").input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => archiveAppMessage(input.id, ctx.user.id)),
   }),
   rollover: router({
-    settings: managerProcedure.query(() => ensureRolloverSettings()),
-    updateSettings: managerProcedure.input(z.object({ enabled: z.boolean(), heartbeatTaskUid: z.string().trim().max(65).nullable().optional() }))
+    settings: permissionProcedure("rollover_manage").query(() => ensureRolloverSettings()),
+    updateSettings: permissionProcedure("rollover_manage").input(z.object({ enabled: z.boolean(), heartbeatTaskUid: z.string().trim().max(65).nullable().optional() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
         await db.update(shortageRolloverSettings).set({ enabled: input.enabled, ...(input.heartbeatTaskUid !== undefined ? { scheduleCronTaskUid: input.heartbeatTaskUid } : {}) }).where(eq(shortageRolloverSettings.id, 1));
         return ensureRolloverSettings();
       }),
-    runNow: managerProcedure.mutation(() => rolloverOpenShortages()),
+    runNow: permissionProcedure("rollover_manage").mutation(() => rolloverOpenShortages()),
   }),
 });
 
