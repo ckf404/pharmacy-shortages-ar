@@ -34,6 +34,12 @@ describe("router authorization for shortage editing and team chat", () => {
     await expect(callerFor(user(["shortages_create"])).shortages.update({ id: 31, productName: "ممنوع", dosageForm: "أقراص", quantity: 1, priority: "normal" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
+  it("persists a team label and short note when registering a new shortage", async () => {
+    db.createShortageItem.mockResolvedValue(52);
+    await callerFor(user(["shortages_create"])).shortages.create({ productName: "صنف جديد", dosageForm: "نقط", quantity: 2, priority: "important", internalLabel: "موصى عليه", notes: "العميل سأل عليه", suggestedSupplierId: null });
+    expect(db.createShortageItem).toHaveBeenCalledWith(expect.objectContaining({ productName: "صنف جديد", dosageForm: "نقط", quantity: 2, internalLabel: "موصى عليه", notes: "العميل سأل عليه", createdByUserId: 14 }));
+  });
+
   it("enforces chat enabled and user-send settings through the real send procedure", async () => {
     db.createGroupChatMessage.mockResolvedValue(44);
     db.getAppSettings.mockResolvedValueOnce({ chatEnabled: false, chatUsersCanSend: true });

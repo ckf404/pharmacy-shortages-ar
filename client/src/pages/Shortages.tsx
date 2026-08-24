@@ -17,7 +17,7 @@ const priorityClass = { normal: "bg-sky-50 text-sky-700 ring-sky-100", important
 const dosageForms = ["أقراص", "شراب", "مرهم", "نقط", "كريم", "حقن"] as const;
 
 export default function Shortages() {
-  const [form, setForm] = useState({ productName: "", dosageForm: "أقراص", quantityChoice: "1", customQuantity: "", priority: "normal" as "normal" | "important" | "urgent", suggestedSupplierId: "none", notes: "" });
+  const [form, setForm] = useState({ productName: "", dosageForm: "أقراص", quantityChoice: "1", customQuantity: "", priority: "normal" as "normal" | "important" | "urgent", internalLabel: "none", suggestedSupplierId: "none", notes: "" });
   const [selected, setSelected] = useState<number[]>([]);
   const [orderSupplierId, setOrderSupplierId] = useState("");
   const [archiveDayKey, setArchiveDayKey] = useState<string | null>(null);
@@ -68,8 +68,8 @@ export default function Shortages() {
     const normalizedName = form.productName.trim().replace(/\s+/g, " ").toLocaleLowerCase("ar-EG");
     const duplicates = dashboard.data?.items.filter(item => item.productName.trim().replace(/\s+/g, " ").toLocaleLowerCase("ar-EG") === normalizedName) ?? [];
     if (duplicates.length > 0 && !window.confirm(`يوجد بالفعل ${duplicates.length} صنف باسم «${form.productName.trim()}» في فاتورة اليوم. هل تريد الإكمال وإضافة نسخة جديدة؟`)) return;
-    await addItem.mutateAsync({ productName: form.productName, dosageForm: form.dosageForm, quantity, priority: form.priority, suggestedSupplierId: form.suggestedSupplierId === "none" ? null : Number(form.suggestedSupplierId), notes: form.notes || null });
-    setForm({ productName: "", dosageForm: "أقراص", quantityChoice: "1", customQuantity: "", priority: "normal", suggestedSupplierId: "none", notes: "" });
+    await addItem.mutateAsync({ productName: form.productName, dosageForm: form.dosageForm, quantity, priority: form.priority, internalLabel: form.internalLabel === "none" ? null : form.internalLabel, suggestedSupplierId: form.suggestedSupplierId === "none" ? null : Number(form.suggestedSupplierId), notes: form.notes || null });
+    setForm({ productName: "", dosageForm: "أقراص", quantityChoice: "1", customQuantity: "", priority: "normal", internalLabel: "none", suggestedSupplierId: "none", notes: "" });
     toast.success("تمت إضافة الصنف إلى فاتورة اليوم");
   };
 
@@ -122,6 +122,7 @@ export default function Shortages() {
   if (dashboard.isLoading) return <div className="page-loader"><Loader2 className="h-6 w-6 animate-spin" />جاري تجهيز فاتورة اليوم…</div>;
 
   return <div className="space-y-6">
+    {canCreate && presentation.data?.showShortageForm !== false && <section className="registration-internal-controls"><div><p>تفاصيل داخلية للصنف التالي</p><strong>تظهر للفريق فقط ولا تُرسل للمخزن</strong></div><div className="registration-internal-grid">{presentation.data?.showInternalLabels !== false && <div className="space-y-1"><Label>تصنيف الفريق</Label><Select value={form.internalLabel} onValueChange={value => setForm({ ...form, internalLabel: value })}><SelectTrigger className="h-9 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">بدون تصنيف</SelectItem>{internalLabelOptions.map(label => <SelectItem key={label} value={label}>{label}</SelectItem>)}</SelectContent></Select></div>}{presentation.data?.showNotesField !== false && <div className="space-y-1"><Label htmlFor="notes-quick">ملاحظة مختصرة</Label><Input id="notes-quick" value={form.notes} onChange={event => setForm({ ...form, notes: event.target.value })} maxLength={140} placeholder="مثال: العميل سأل عليه" /></div>}</div></section>}
     <header className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end"><div><p className="eyebrow">سجل مشترك لجميع المستخدمين</p><h1 className="page-title">فاتورة نواقص الأدوية اليومية</h1><p className="mt-1 text-sm text-slate-500">{presentation.data?.dashboardSubtitle ?? "تابع حالة الصنف من التسجيل حتى الاستلام دون فقدان سجل اليوم."}</p></div><span className="date-chip">فاتورة {dashboard.data?.day.dayKey}</span></header>
     <section className="invoice-pharmacy"><Pill className="h-5 w-5 text-teal-700" /><div><strong>{presentation.data?.pharmacyName ?? "الصيدلية"}</strong><p>{[presentation.data?.pharmacyPhone, presentation.data?.pharmacyAddress].filter(Boolean).join(" — ") || "بيانات الصيدلية تظهر في فاتورة اليوم ورسالة المخزن."}</p></div></section>
     <section className="vip-daily-focus"><div className="vip-focus-icon"><Flame className="h-5 w-5" /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><p className="vip-focus-kicker">تركيز اليوم · {dashboard.data?.day.dayKey}</p><strong>{closureProgress}% مكتمل</strong></div><h2>{focusText}</h2><div className="vip-focus-progress"><span style={{ width: `${closureProgress}%` }} /></div></div><div className="vip-focus-target"><Target className="h-4 w-4" /><span>{receivedItems.length}/{totalToday || 0}</span></div></section>
