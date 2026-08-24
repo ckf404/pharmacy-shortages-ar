@@ -31,11 +31,7 @@ const userDefaults: PermissionMap = {
   activity_view: false,
 };
 
-const supervisorDefaults: PermissionMap = {
-  ...allPermissions(),
-  users_manage: false,
-  settings_manage: false,
-};
+const supervisorDefaults: PermissionMap = allPermissions();
 
 export function defaultPermissions(role: "user" | "supervisor" | "admin"): PermissionMap {
   if (role === "admin") return allPermissions();
@@ -44,7 +40,7 @@ export function defaultPermissions(role: "user" | "supervisor" | "admin"): Permi
 
 export function parsePermissions(raw: string | null | undefined, role: "user" | "supervisor" | "admin"): PermissionMap {
   const defaults = defaultPermissions(role);
-  if (role === "admin" || !raw) return defaults;
+  if (role === "admin" || role === "supervisor" || !raw) return defaults;
   try {
     const values = JSON.parse(raw) as unknown;
     if (!Array.isArray(values)) return defaults;

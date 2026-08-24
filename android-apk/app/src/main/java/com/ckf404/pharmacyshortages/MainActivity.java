@@ -30,7 +30,8 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 public class MainActivity extends Activity {
-    private static final String APP_URL = "https://pharmashrt-lxbcyjhj.manus.space/?app=1.2.0";
+    private static final String APP_URL = "https://pharmashrt-lxbcyjhj.manus.space/?app=1.3.2";
+    private static final int CACHE_RESET_VERSION = 7;
     private static final int DEEP_TEAL = Color.rgb(17, 52, 64);
     private WebView webView;
     private ProgressBar progressBar;
@@ -88,6 +89,11 @@ public class MainActivity extends Activity {
         webView.getSettings().setUseWideViewPort(true);
         webView.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
         webView.getSettings().setSupportMultipleWindows(false);
+        int lastCacheReset = getSharedPreferences("pharmacy_shortages", MODE_PRIVATE).getInt("cache_reset_version", 0);
+        if (lastCacheReset < CACHE_RESET_VERSION) {
+            webView.clearCache(true);
+            getSharedPreferences("pharmacy_shortages", MODE_PRIVATE).edit().putInt("cache_reset_version", CACHE_RESET_VERSION).apply();
+        }
         webView.addJavascriptInterface(new PharmacyAndroidBridge(), "PharmacyAndroid");
         webView.setWebChromeClient(new WebChromeClient() {
             @Override

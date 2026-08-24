@@ -16,16 +16,16 @@ export type PermissionKey = keyof typeof permissionLabels;
 type Role = "user" | "supervisor" | "admin";
 
 const userDefaults: PermissionKey[] = ["shortages_create", "shortages_update", "orders_prepare"];
-const supervisorDefaults: PermissionKey[] = ["shortages_create", "shortages_update", "shortages_delete", "orders_prepare", "suppliers_manage", "suppliers_delete", "messages_manage", "rollover_manage", "activity_view"];
+const supervisorDefaults: PermissionKey[] = Object.keys(permissionLabels) as PermissionKey[];
 
 export function parseUserPermissions(raw: string | null | undefined, role: Role): PermissionKey[] {
-  if (role === "admin") return Object.keys(permissionLabels) as PermissionKey[];
-  if (!raw) return role === "supervisor" ? supervisorDefaults : userDefaults;
+  if (role === "admin" || role === "supervisor") return Object.keys(permissionLabels) as PermissionKey[];
+  if (!raw) return userDefaults;
   try {
     const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((key): key is PermissionKey => typeof key === "string" && key in permissionLabels) : (role === "supervisor" ? supervisorDefaults : userDefaults);
+    return Array.isArray(parsed) ? parsed.filter((key): key is PermissionKey => typeof key === "string" && key in permissionLabels) : userDefaults;
   } catch {
-    return role === "supervisor" ? supervisorDefaults : userDefaults;
+    return userDefaults;
   }
 }
 

@@ -22,10 +22,9 @@ describe("granular permissions", () => {
     expect(parsed.rollover_manage).toBe(false);
   });
 
-  it("allows a non-admin account only when the individual grant is present", () => {
-    const granted = { role: "supervisor" as const, permissions: serializePermissions(["users_manage"]) };
-    const blocked = { role: "supervisor" as const, permissions: serializePermissions(["activity_view"]) };
-    expect(canUsePermission(granted, "users_manage")).toBe(true);
-    expect(canUsePermission(blocked, "users_manage")).toBe(false);
+  it("gives supervisors complete control even if an older saved permission list is incomplete", () => {
+    const supervisor = { role: "supervisor" as const, permissions: serializePermissions(["activity_view"]) };
+    expect(canUsePermission(supervisor, "users_manage")).toBe(true);
+    expect(canUsePermission(supervisor, "settings_manage")).toBe(true);
   });
 });
