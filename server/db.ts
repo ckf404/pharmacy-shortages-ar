@@ -5,6 +5,8 @@ import {
   appMessageReads,
   appMessages,
   appSettings,
+  groupChatMessageReactions,
+  groupChatMessageReads,
   groupChatMessages,
   shortageActivityLogs,
   shortageDays,
@@ -17,7 +19,7 @@ import {
 } from "../drizzle/schema";
 import { cairoDayKey, decideArchivedTransfer, previousDayKey, selectRolloverCandidates } from "./shortagesDomain";
 import { achievementLevel } from "./profile";
-import { canDeleteChatMessage, normalizeChatMessage } from "./chatDomain";
+import { canDeleteChatMessage, hasAvailableChatReferences, messageIdsReadOnChatOpen, normalizeChatMessage, toggleChatReactionInStore } from "./chatDomain";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -490,12 +492,14 @@ export async function updateAppSettings(input: {
   return getAppSettings();
 }
 
-export async function listGroupChatMessages(limit = 120) {
+export async function listGroupChatMessages(viewerUserId: number, limit = 120) {
   const db = await getDb();
   if (!db) return [];
-  return db.select({
+  const messages = await db.select({
     id: groupChatMessages.id,
     body: groupChatMessages.body,
+    replyToMessageId: groupChatMessages.replyToMessageId,
+    forwardedFromMessageId: groupChatMessages.forwardedFromMessageId,
     createdByUserId: groupChatMessages.createdByUserId,
     authorName: users.name,
     authorRole: users.role,
@@ -505,17 +509,84 @@ export async function listGroupChatMessages(limit = 120) {
     .where(isNull(groupChatMessages.deletedAt))
     .orderBy(desc(groupChatMessages.createdAt))
     .limit(limit);
+  if (!messages.length) return [];
+
+  const messageIds = messages.map(message => message.id);
+  const [reads, reactions] = await Promise.all([
+    db.select({ messageId: groupChatMessageReads.messageId, userId: groupChatMessageReads.userId, readerName: users.name })
+      .from(groupChatMessageReads)
+      .innerJoin(users, eq(groupChatMessageReads.userId, users.id))
+      .where(inArray(groupChatMessageReads.messageId, messageIds)),
+    db.select({ messageId: groupChatMessageReactions.messageId, userId: groupChatMessageReactions.userId, emoji: groupChatMessageReactions.emoji, reactorName: users.name })
+      .from(groupChatMessageReactions)
+      .innerJoin(users, eq(groupChatMessageReactions.userId, users.id))
+      .where(inArray(groupChatMessageReactions.messageId, messageIds)),
+  ]);
+
+  const referenceIds = Array.from(new Set(messages.flatMap(message => [message.replyToMessageId, message.forwardedFromMessageId]).filter((id): id is number => Boolean(id))));
+  const references = referenceIds.length ? await db.select({ id: groupChatMessages.id, body: groupChatMessages.body, authorName: users.name })
+    .from(groupChatMessages)
+    .innerJoin(users, eq(groupChatMessages.createdByUserId, users.id))
+    .where(and(inArray(groupChatMessages.id, referenceIds), isNull(groupChatMessages.deletedAt))) : [];
+  const referencesById = new Map(references.map(reference => [reference.id, reference]));
+
+  return messages.map(message => {
+    const messageReads = reads.filter(read => read.messageId === message.id);
+    const groupedReactions = reactions.filter(reaction => reaction.messageId === message.id).reduce<Record<string, { emoji: string; names: string[]; reactedByMe: boolean }>>((groups, reaction) => {
+      const current = groups[reaction.emoji] ?? { emoji: reaction.emoji, names: [], reactedByMe: false };
+      current.names.push(reaction.reactorName);
+      current.reactedByMe ||= reaction.userId === viewerUserId;
+      groups[reaction.emoji] = current;
+      return groups;
+    }, {});
+    return {
+      ...message,
+      readers: messageReads.map(read => ({ userId: read.userId, name: read.readerName })),
+      readByMe: messageReads.some(read => read.userId === viewerUserId),
+      reactions: Object.values(groupedReactions).map(reaction => ({ ...reaction, count: reaction.names.length })),
+      replyTo: message.replyToMessageId ? referencesById.get(message.replyToMessageId) ?? null : null,
+      forwardedFrom: message.forwardedFromMessageId ? referencesById.get(message.forwardedFromMessageId) ?? null : null,
+    };
+  });
 }
 
-export async function createGroupChatMessage(body: string, createdByUserId: number) {
+export async function createGroupChatMessage(input: { body: string; createdByUserId: number; replyToMessageId?: number | null; forwardedFromMessageId?: number | null }) {
   const db = await getDb();
   if (!db) throw new Error("قاعدة البيانات غير متاحة");
-  const normalized = normalizeChatMessage(body);
+  const normalized = normalizeChatMessage(input.body);
   if (!normalized) throw new Error("اكتب رسالة قبل الإرسال");
-  const result = await db.insert(groupChatMessages).values({ body: normalized, createdByUserId });
+  const referenceIds = [input.replyToMessageId, input.forwardedFromMessageId].filter((id): id is number => Boolean(id));
+  if (referenceIds.length) {
+    const references = await db.select({ id: groupChatMessages.id }).from(groupChatMessages)
+      .where(and(inArray(groupChatMessages.id, referenceIds), isNull(groupChatMessages.deletedAt)));
+    if (!hasAvailableChatReferences(referenceIds, references.map(reference => reference.id))) throw new Error("تعذر العثور على الرسالة الأصلية.");
+  }
+  const result = await db.insert(groupChatMessages).values({ body: normalized, createdByUserId: input.createdByUserId, replyToMessageId: input.replyToMessageId ?? null, forwardedFromMessageId: input.forwardedFromMessageId ?? null });
   const id = Number(result[0].insertId);
-  await createAudit("group_chat_message_created", "group_chat_message", id, createdByUserId);
+  await db.insert(groupChatMessageReads).values({ messageId: id, userId: input.createdByUserId });
+  await createAudit("group_chat_message_created", "group_chat_message", id, input.createdByUserId);
   return id;
+}
+
+export async function markGroupChatMessagesRead(messageIds: number[], userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const ids = messageIdsReadOnChatOpen(messageIds);
+  if (!ids.length) return;
+  const visible = await db.select({ id: groupChatMessages.id }).from(groupChatMessages)
+    .where(and(inArray(groupChatMessages.id, ids), isNull(groupChatMessages.deletedAt)));
+  await Promise.all(visible.map(message => db.insert(groupChatMessageReads).values({ messageId: message.id, userId }).onDuplicateKeyUpdate({ set: { readAt: new Date() } })));
+}
+
+export async function toggleGroupChatReaction(input: { messageId: number; userId: number; emoji: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  return toggleChatReactionInStore(input, {
+    findMessage: async messageId => (await db.select({ id: groupChatMessages.id, deletedAt: groupChatMessages.deletedAt }).from(groupChatMessages).where(eq(groupChatMessages.id, messageId)).limit(1))[0],
+    findReaction: async reaction => (await db.select({ id: groupChatMessageReactions.id }).from(groupChatMessageReactions).where(and(eq(groupChatMessageReactions.messageId, reaction.messageId), eq(groupChatMessageReactions.userId, reaction.userId), eq(groupChatMessageReactions.emoji, reaction.emoji))).limit(1))[0],
+    addReaction: async reaction => { await db.insert(groupChatMessageReactions).values(reaction); },
+    removeReaction: async reactionId => { await db.delete(groupChatMessageReactions).where(eq(groupChatMessageReactions.id, reactionId)); },
+  });
 }
 
 export async function deleteGroupChatMessage(input: { id: number; actorUserId: number; canModerate: boolean }) {

@@ -149,6 +149,8 @@ export const appSettings = mysqlTable("app_settings", {
 export const groupChatMessages = mysqlTable("group_chat_messages", {
   id: int("id").autoincrement().primaryKey(),
   body: text("body").notNull(),
+  replyToMessageId: int("replyToMessageId"),
+  forwardedFromMessageId: int("forwardedFromMessageId"),
   createdByUserId: int("createdByUserId").notNull().references(() => users.id),
   deletedAt: timestamp("deletedAt"),
   deletedByUserId: int("deletedByUserId").references(() => users.id),
@@ -156,6 +158,29 @@ export const groupChatMessages = mysqlTable("group_chat_messages", {
 }, table => [
   index("group_chat_messages_created_index").on(table.createdAt),
   index("group_chat_messages_deleted_index").on(table.deletedAt),
+  index("group_chat_messages_reply_index").on(table.replyToMessageId),
+  index("group_chat_messages_forward_index").on(table.forwardedFromMessageId),
+]);
+
+export const groupChatMessageReads = mysqlTable("group_chat_message_reads", {
+  id: int("id").autoincrement().primaryKey(),
+  messageId: int("messageId").notNull().references(() => groupChatMessages.id),
+  userId: int("userId").notNull().references(() => users.id),
+  readAt: timestamp("readAt").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("group_chat_message_reads_message_user_unique").on(table.messageId, table.userId),
+  index("group_chat_message_reads_user_index").on(table.userId),
+]);
+
+export const groupChatMessageReactions = mysqlTable("group_chat_message_reactions", {
+  id: int("id").autoincrement().primaryKey(),
+  messageId: int("messageId").notNull().references(() => groupChatMessages.id),
+  userId: int("userId").notNull().references(() => users.id),
+  emoji: varchar("emoji", { length: 16 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("group_chat_message_reactions_message_user_emoji_unique").on(table.messageId, table.userId, table.emoji),
+  index("group_chat_message_reactions_message_index").on(table.messageId),
 ]);
 
 export const appMessages = mysqlTable("app_messages", {

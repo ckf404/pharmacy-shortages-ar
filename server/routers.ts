@@ -30,6 +30,7 @@ import {
   listSuppliers,
   listUsers,
   listVisibleMessages,
+  markGroupChatMessagesRead,
   markMessageRead,
   manuallyAddArchivedShortage,
   rolloverOpenShortages,
@@ -39,6 +40,7 @@ import {
   updateShortageItem,
   updateAppSettings,
   updateOwnProfile,
+  toggleGroupChatReaction,
 } from "./db";
 import { normalizeEgyptianWhatsApp } from "./shortagesDomain";
 import { canSendGroupChat } from "./chatDomain";
@@ -233,15 +235,27 @@ export const appRouter = router({
     archive: permissionProcedure("messages_manage").input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => archiveAppMessage(input.id, ctx.user.id)),
   }),
   chat: router({
-    messages: protectedProcedure.query(() => listGroupChatMessages()),
-    send: permissionProcedure("chat_send").input(z.object({ body: z.string().trim().min(1).max(1200) })).mutation(async ({ ctx, input }) => {
+    messages: protectedProcedure.query(({ ctx }) => listGroupChatMessages(ctx.user.id)),
+    send: protectedProcedure.input(z.object({ body: z.string().trim().min(1).max(1200), replyToMessageId: z.number().int().positive().nullable().optional(), forwardedFromMessageId: z.number().int().positive().nullable().optional() })).mutation(async ({ ctx, input }) => {
       const settings = await getAppSettings();
       const canModerate = canUsePermission(ctx.user, "chat_manage");
       if (!settings.chatEnabled) throw new TRPCError({ code: "FORBIDDEN", message: "الدردشة متوقفة حاليًا من المشرف." });
-      if (!canSendGroupChat({ chatEnabled: settings.chatEnabled, chatUsersCanSend: settings.chatUsersCanSend, hasSendPermission: canUsePermission(ctx.user, "chat_send"), canModerate })) {
+      if (!canSendGroupChat({ chatEnabled: settings.chatEnabled, chatUsersCanSend: settings.chatUsersCanSend, canModerate })) {
         throw new TRPCError({ code: "FORBIDDEN", message: "المشرف أوقف الإرسال للحسابات العادية مؤقتًا." });
       }
-      return createGroupChatMessage(input.body, ctx.user.id);
+      try {
+        return await createGroupChatMessage({ ...input, createdByUserId: ctx.user.id });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "تعذر إرسال الرسالة." });
+      }
+    }),
+    read: protectedProcedure.input(z.object({ messageIds: z.array(z.number().int().positive()).min(1).max(120) })).mutation(({ ctx, input }) => markGroupChatMessagesRead(input.messageIds, ctx.user.id)),
+    react: protectedProcedure.input(z.object({ messageId: z.number().int().positive(), emoji: z.enum(["👍", "❤️", "😂", "🙏", "🔥"]) })).mutation(async ({ ctx, input }) => {
+      try {
+        return await toggleGroupChatReaction({ ...input, userId: ctx.user.id });
+      } catch (error) {
+        throw new TRPCError({ code: "NOT_FOUND", message: error instanceof Error ? error.message : "تعذر التفاعل مع الرسالة." });
+      }
     }),
     delete: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       try {
