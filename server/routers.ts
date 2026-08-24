@@ -36,6 +36,7 @@ import {
   rolloverOpenShortages,
   saveSupplier,
   setShortageItemStatus,
+  setShortageItemsReceived,
   softDeleteShortageItem,
   updateShortageItem,
   updateAppSettings,
@@ -129,6 +130,8 @@ export const appRouter = router({
     })).mutation(({ ctx, input }) => createShortageItem({ ...input, createdByUserId: ctx.user.id })),
     setStatus: permissionProcedure("shortages_update").input(z.object({ id: z.number().int().positive(), status: z.enum(["open", "received"]) }))
       .mutation(({ ctx, input }) => setShortageItemStatus(input.id, input.status, ctx.user.id)),
+    receiveMany: permissionProcedure("shortages_update").input(z.object({ itemIds: z.array(z.number().int().positive()).min(1).max(120) }))
+      .mutation(({ ctx, input }) => setShortageItemsReceived(input.itemIds, ctx.user.id)),
     update: permissionProcedure("shortages_update").input(z.object({
       id: z.number().int().positive(),
       productName: z.string().trim().min(1).max(255),

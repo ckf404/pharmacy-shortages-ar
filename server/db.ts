@@ -338,6 +338,21 @@ export async function setShortageItemStatus(itemId: number, status: "open" | "re
   await createAudit(status === "received" ? "shortage_received" : "shortage_reopened", "shortage_item", itemId, actorUserId, item.productName);
 }
 
+export async function setShortageItemsReceived(itemIds: number[], actorUserId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const ids = Array.from(new Set(itemIds.filter(id => Number.isInteger(id) && id > 0))).slice(0, 120);
+  if (!ids.length) return 0;
+  const items = await db.select({ id: shortageItems.id, productName: shortageItems.productName }).from(shortageItems)
+    .where(and(inArray(shortageItems.id, ids), eq(shortageItems.status, "open")));
+  if (!items.length) return 0;
+  const receivedAt = new Date();
+  await db.update(shortageItems).set({ status: "received", receivedAt, receivedByUserId: actorUserId })
+    .where(and(inArray(shortageItems.id, items.map(item => item.id)), eq(shortageItems.status, "open")));
+  await Promise.all(items.map(item => createAudit("shortage_received_batch", "shortage_item", item.id, actorUserId, item.productName)));
+  return items.length;
+}
+
 export async function updateShortageItem(input: {
   id: number;
   productName: string;

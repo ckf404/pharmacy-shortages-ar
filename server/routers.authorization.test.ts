@@ -6,7 +6,7 @@ const db = vi.hoisted(() => ({
   deleteSupplier: vi.fn(), deleteGroupChatMessage: vi.fn(), deleteUserSafely: vi.fn(), ensureRolloverSettings: vi.fn(), getAppSettings: vi.fn(),
   getActivityLogs: vi.fn(), getLocalUserById: vi.fn(), getLocalUserByUsername: vi.fn(), getShortageDayInvoice: vi.fn(), getUserProfile: vi.fn(), getTodayDashboard: vi.fn(),
   listLoginAccounts: vi.fn(), listAllMessages: vi.fn(), listGroupChatMessages: vi.fn(), listAchievementBoard: vi.fn(), listShortageDayArchive: vi.fn(), listSuppliers: vi.fn(), listUsers: vi.fn(),
-  listVisibleMessages: vi.fn(), markGroupChatMessagesRead: vi.fn(), markMessageRead: vi.fn(), manuallyAddArchivedShortage: vi.fn(), rolloverOpenShortages: vi.fn(), saveSupplier: vi.fn(), setShortageItemStatus: vi.fn(),
+  listVisibleMessages: vi.fn(), markGroupChatMessagesRead: vi.fn(), markMessageRead: vi.fn(), manuallyAddArchivedShortage: vi.fn(), rolloverOpenShortages: vi.fn(), saveSupplier: vi.fn(), setShortageItemStatus: vi.fn(), setShortageItemsReceived: vi.fn(),
   softDeleteShortageItem: vi.fn(), updateShortageItem: vi.fn(), updateAppSettings: vi.fn(), updateOwnProfile: vi.fn(), getDb: vi.fn(),
   toggleGroupChatReaction: vi.fn(),
 }));
@@ -39,6 +39,13 @@ describe("router authorization for shortage editing and team chat", () => {
     db.createShortageItem.mockResolvedValue(52);
     await callerFor(user(["shortages_create"])).shortages.create({ productName: "صنف جديد", dosageForm: "نقط", quantity: 2, priority: "important", internalLabel: "موصى عليه", notes: "العميل سأل عليه", suggestedSupplierId: null });
     expect(db.createShortageItem).toHaveBeenCalledWith(expect.objectContaining({ productName: "صنف جديد", dosageForm: "نقط", quantity: 2, internalLabel: "موصى عليه", notes: "العميل سأل عليه", createdByUserId: 14 }));
+  });
+
+  it("receives selected shortage items in one authorized batch", async () => {
+    db.setShortageItemsReceived.mockResolvedValue(3);
+    await expect(callerFor(user(["shortages_update"])).shortages.receiveMany({ itemIds: [4, 7, 9] })).resolves.toBe(3);
+    expect(db.setShortageItemsReceived).toHaveBeenCalledWith([4, 7, 9], 14);
+    await expect(callerFor(user()).shortages.receiveMany({ itemIds: [4] })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("enforces chat enabled and user-send settings through the real send procedure", async () => {
