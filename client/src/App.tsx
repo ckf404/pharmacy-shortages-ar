@@ -12,6 +12,7 @@ import Suppliers from "./pages/Suppliers";
 import Profile from "./pages/Profile";
 import { UsersVipPage, SettingsVipPage } from "./pages/Management";
 import SupervisorControls from "./pages/SupervisorControls";
+import TeamChat from "./pages/TeamChat";
 import { Loader2, ShieldAlert } from "lucide-react";
 import { hasPermission } from "./lib/permissions";
 
@@ -24,6 +25,7 @@ function Router() {
   return <DashboardLayout><Switch>
     <Route path="/" component={Shortages} />
     <Route path="/profile" component={Profile} />
+    <Route path="/chat" component={TeamChat} />
     <Route path="/suppliers">{hasPermission(user, "suppliers_manage") ? <div className="vip-page"><Suppliers /></div> : <NotAllowed />}</Route>
     <Route path="/users">{hasPermission(user, "users_manage") ? <div className="vip-page"><UsersVipPage /></div> : <NotAllowed />}</Route>
     <Route path="/settings/control">{hasPermission(user, "settings_manage") ? <div className="vip-page"><SupervisorControls /></div> : <NotAllowed />}</Route>

@@ -34,7 +34,8 @@ describe("shortages domain", () => {
       settings: { pharmacyName: "صيدلية فارس", supplierMessageIntro: "طلب {pharmacyName} بتاريخ {date}", supplierMessageFooter: "في الانتظار" },
     });
     expect(message).toContain("طلب صيدلية فارس بتاريخ 2026-08-23");
-    expect(message).toContain("1. أوجمنتين 1 جم — أقراص × 2 — مهم");
+    expect(message).toContain("1. أوجمنتين 1 جم — أقراص × 2");
+    expect(message).not.toContain("— مهم");
     expect(message).not.toContain("علبة واحدة");
     expect(message).toContain("في الانتظار");
     expect(whatsappUrl("201012345678", message)).toContain("https://wa.me/201012345678?text=");

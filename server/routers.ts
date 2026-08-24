@@ -8,9 +8,11 @@ import { createLocalSession, hashPassword, verifyPassword } from "./localAuth";
 import {
   archiveAppMessage,
   createAppMessage,
+  createGroupChatMessage,
   createShortageItem,
   createSupplierOrder,
   deleteSupplier,
+  deleteGroupChatMessage,
   deleteUserSafely,
   ensureRolloverSettings,
   getAppSettings,
@@ -22,6 +24,7 @@ import {
   getTodayDashboard,
   listLoginAccounts,
   listAllMessages,
+  listGroupChatMessages,
   listAchievementBoard,
   listShortageDayArchive,
   listSuppliers,
@@ -33,10 +36,12 @@ import {
   saveSupplier,
   setShortageItemStatus,
   softDeleteShortageItem,
+  updateShortageItem,
   updateAppSettings,
   updateOwnProfile,
 } from "./db";
 import { normalizeEgyptianWhatsApp } from "./shortagesDomain";
+import { canSendGroupChat } from "./chatDomain";
 import { shortageRolloverSettings, users } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { getDb } from "./db";
@@ -116,11 +121,22 @@ export const appRouter = router({
       dosageForm: z.string().trim().min(1).max(64),
       quantity: z.number().int().min(1).max(999),
       priority: z.enum(["normal", "important", "urgent"]),
+      internalLabel: z.string().trim().max(64).nullable().optional(),
       suggestedSupplierId: z.number().int().positive().nullable().optional(),
       notes: z.string().trim().max(1000).nullable().optional(),
     })).mutation(({ ctx, input }) => createShortageItem({ ...input, createdByUserId: ctx.user.id })),
     setStatus: permissionProcedure("shortages_update").input(z.object({ id: z.number().int().positive(), status: z.enum(["open", "received"]) }))
       .mutation(({ ctx, input }) => setShortageItemStatus(input.id, input.status, ctx.user.id)),
+    update: permissionProcedure("shortages_update").input(z.object({
+      id: z.number().int().positive(),
+      productName: z.string().trim().min(1).max(255),
+      dosageForm: z.string().trim().min(1).max(64),
+      quantity: z.number().int().min(1).max(999),
+      priority: z.enum(["normal", "important", "urgent"]),
+      internalLabel: z.string().trim().max(64).nullable().optional(),
+      suggestedSupplierId: z.number().int().positive().nullable().optional(),
+      notes: z.string().trim().max(1000).nullable().optional(),
+    })).mutation(({ ctx, input }) => updateShortageItem({ ...input, actorUserId: ctx.user.id })),
     delete: permissionProcedure("shortages_delete").input(z.object({ id: z.number().int().positive() }))
       .mutation(({ ctx, input }) => softDeleteShortageItem(input.id, ctx.user.id)),
     addFromArchive: permissionProcedure("shortages_create").input(z.object({ sourceItemId: z.number().int().positive() }))
@@ -196,6 +212,12 @@ export const appRouter = router({
       visibleNavigation: z.string().trim().max(160).nullable().optional(),
       topNotice: z.string().trim().max(255).nullable().optional(),
       navigationOrder: z.string().max(1000).nullable().optional(),
+      chatEnabled: z.boolean().optional(),
+      chatTitle: z.string().trim().min(1).max(120).optional(),
+      chatDescription: z.string().trim().min(1).max(255).optional(),
+      chatUsersCanSend: z.boolean().optional(),
+      showInternalLabels: z.boolean().optional(),
+      internalLabelOptions: z.string().trim().min(1).max(255).optional(),
     })).mutation(({ ctx, input }) => updateAppSettings({ ...input, actorUserId: ctx.user.id })),
   }),
   messages: router({
@@ -209,6 +231,25 @@ export const appRouter = router({
       targetUserId: z.number().int().positive().nullable().optional(),
     })).mutation(({ ctx, input }) => createAppMessage({ ...input, createdByUserId: ctx.user.id })),
     archive: permissionProcedure("messages_manage").input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => archiveAppMessage(input.id, ctx.user.id)),
+  }),
+  chat: router({
+    messages: protectedProcedure.query(() => listGroupChatMessages()),
+    send: permissionProcedure("chat_send").input(z.object({ body: z.string().trim().min(1).max(1200) })).mutation(async ({ ctx, input }) => {
+      const settings = await getAppSettings();
+      const canModerate = canUsePermission(ctx.user, "chat_manage");
+      if (!settings.chatEnabled) throw new TRPCError({ code: "FORBIDDEN", message: "الدردشة متوقفة حاليًا من المشرف." });
+      if (!canSendGroupChat({ chatEnabled: settings.chatEnabled, chatUsersCanSend: settings.chatUsersCanSend, hasSendPermission: canUsePermission(ctx.user, "chat_send"), canModerate })) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "المشرف أوقف الإرسال للحسابات العادية مؤقتًا." });
+      }
+      return createGroupChatMessage(input.body, ctx.user.id);
+    }),
+    delete: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      try {
+        await deleteGroupChatMessage({ id: input.id, actorUserId: ctx.user.id, canModerate: canUsePermission(ctx.user, "chat_manage") });
+      } catch (error) {
+        throw new TRPCError({ code: "FORBIDDEN", message: error instanceof Error ? error.message : "تعذر حذف الرسالة" });
+      }
+    }),
   }),
   rollover: router({
     settings: permissionProcedure("rollover_manage").query(() => ensureRolloverSettings()),

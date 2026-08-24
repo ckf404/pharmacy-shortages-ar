@@ -98,10 +98,9 @@ export function buildWhatsAppMessage(input: {
     "",
     "الأصناف المطلوبة:",
     ...input.items.map((item, index) => {
-      const priority = item.priority === "normal" ? "" : " — مهم";
       const form = item.dosageForm?.trim() ? ` — ${item.dosageForm.trim()}` : "";
       const quantity = item.quantity && item.quantity > 1 ? ` × ${item.quantity}` : "";
-      return `${index + 1}. ${item.productName}${form}${quantity}${priority}`;
+      return `${index + 1}. ${item.productName}${form}${quantity}`;
     }),
     "",
     footer,

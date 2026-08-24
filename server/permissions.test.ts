@@ -22,6 +22,11 @@ describe("granular permissions", () => {
     expect(parsed.rollover_manage).toBe(false);
   });
 
+  it("allows shortage editing only when a normal user has the explicit editing permission", () => {
+    expect(canUsePermission({ role: "user", permissions: serializePermissions(["shortages_create"]) }, "shortages_update")).toBe(false);
+    expect(canUsePermission({ role: "user", permissions: serializePermissions(["shortages_update"]) }, "shortages_update")).toBe(true);
+  });
+
   it("gives supervisors complete control even if an older saved permission list is incomplete", () => {
     const supervisor = { role: "supervisor" as const, permissions: serializePermissions(["activity_view"]) };
     expect(canUsePermission(supervisor, "users_manage")).toBe(true);

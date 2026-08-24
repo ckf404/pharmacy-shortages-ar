@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { hasPermission, type PermissionKey } from "@/lib/permissions";
-import { Bell, Building2, CheckCheck, ClipboardList, LogOut, Menu, Settings2, ShieldCheck, SlidersHorizontal, Stethoscope, Trophy, UsersRound, X } from "lucide-react";
+import { Bell, Building2, CheckCheck, ClipboardList, LogOut, Menu, MessageCircleMore, Settings2, ShieldCheck, SlidersHorizontal, Stethoscope, Trophy, UsersRound, X } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
 
@@ -12,6 +12,7 @@ type NavigationItem = { key: string; path: string; label: string; icon: typeof C
 const navigation: NavigationItem[] = [
   { key: "shortages", path: "/", label: "نواقص اليوم", icon: ClipboardList },
   { key: "profile", path: "/profile", label: "حسابي وإنجازاتي", icon: Trophy },
+  { key: "chat", path: "/chat", label: "دردشة الفريق", icon: MessageCircleMore },
   { key: "suppliers", path: "/suppliers", label: "المخازن", icon: Building2, permissions: ["suppliers_manage"] },
   { key: "users", path: "/users", label: "المستخدمون", icon: UsersRound, permissions: ["users_manage"] },
   { key: "control", path: "/settings/control", label: "تحكم المشرف", icon: SlidersHorizontal, permissions: ["settings_manage"] },

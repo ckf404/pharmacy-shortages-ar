@@ -7,6 +7,8 @@ export const permissionLabels = {
   suppliers_delete: "حذف المخازن",
   users_manage: "إدارة المستخدمين",
   messages_manage: "إدارة الرسائل",
+  chat_send: "إرسال في الدردشة",
+  chat_manage: "إدارة الدردشة",
   settings_manage: "تعديل التنسيق والمحتوى",
   rollover_manage: "إدارة الترحيل",
   activity_view: "عرض سجل العمليات",
@@ -15,7 +17,7 @@ export const permissionLabels = {
 export type PermissionKey = keyof typeof permissionLabels;
 type Role = "user" | "supervisor" | "admin";
 
-const userDefaults: PermissionKey[] = ["shortages_create", "shortages_update", "orders_prepare"];
+const userDefaults: PermissionKey[] = ["shortages_create", "shortages_update", "orders_prepare", "chat_send"];
 const supervisorDefaults: PermissionKey[] = Object.keys(permissionLabels) as PermissionKey[];
 
 export function parseUserPermissions(raw: string | null | undefined, role: Role): PermissionKey[] {

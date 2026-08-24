@@ -5,6 +5,7 @@ import {
   appMessageReads,
   appMessages,
   appSettings,
+  groupChatMessages,
   shortageActivityLogs,
   shortageDays,
   shortageItems,
@@ -16,6 +17,7 @@ import {
 } from "../drizzle/schema";
 import { cairoDayKey, decideArchivedTransfer, previousDayKey, selectRolloverCandidates } from "./shortagesDomain";
 import { achievementLevel } from "./profile";
+import { canDeleteChatMessage, normalizeChatMessage } from "./chatDomain";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -199,6 +201,7 @@ async function listInvoiceItems(shortageDayId: number) {
     dosageForm: shortageItems.dosageForm,
     quantity: shortageItems.quantity,
     priority: shortageItems.priority,
+    internalLabel: shortageItems.internalLabel,
     status: shortageItems.status,
     notes: shortageItems.notes,
     suggestedSupplierId: shortageItems.suggestedSupplierId,
@@ -248,6 +251,7 @@ export async function createShortageItem(input: {
   dosageForm: string;
   quantity: number;
   priority: "normal" | "important" | "urgent";
+  internalLabel?: string | null;
   notes?: string | null;
   suggestedSupplierId?: number | null;
   createdByUserId: number;
@@ -255,7 +259,7 @@ export async function createShortageItem(input: {
   const db = await getDb();
   if (!db) throw new Error("قاعدة البيانات غير متاحة");
   const day = await getOrCreateShortageDay();
-  const result = await db.insert(shortageItems).values({ ...input, shortageDayId: day.id, notes: input.notes ?? null, suggestedSupplierId: input.suggestedSupplierId ?? null });
+  const result = await db.insert(shortageItems).values({ ...input, shortageDayId: day.id, internalLabel: input.internalLabel ?? null, notes: input.notes ?? null, suggestedSupplierId: input.suggestedSupplierId ?? null });
   const id = Number(result[0].insertId);
   await createAudit("shortage_created", "shortage_item", id, input.createdByUserId, input.productName);
   return id;
@@ -288,6 +292,7 @@ export async function manuallyAddArchivedShortage(sourceItemId: number, actorUse
       dosageForm: source.dosageForm,
       quantity: source.quantity,
       priority: source.priority,
+      internalLabel: source.internalLabel,
       status: "open",
       notes: source.notes,
       suggestedSupplierId: source.suggestedSupplierId,
@@ -306,6 +311,7 @@ export async function manuallyAddArchivedShortage(sourceItemId: number, actorUse
     dosageForm: source.dosageForm,
     quantity: source.quantity,
     priority: source.priority,
+    internalLabel: source.internalLabel,
     status: "open",
     notes: source.notes,
     suggestedSupplierId: source.suggestedSupplierId,
@@ -328,6 +334,33 @@ export async function setShortageItemStatus(itemId: number, status: "open" | "re
     receivedByUserId: status === "received" ? actorUserId : null,
   }).where(eq(shortageItems.id, itemId));
   await createAudit(status === "received" ? "shortage_received" : "shortage_reopened", "shortage_item", itemId, actorUserId, item.productName);
+}
+
+export async function updateShortageItem(input: {
+  id: number;
+  productName: string;
+  dosageForm: string;
+  quantity: number;
+  priority: "normal" | "important" | "urgent";
+  internalLabel?: string | null;
+  notes?: string | null;
+  suggestedSupplierId?: number | null;
+  actorUserId: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const item = (await db.select().from(shortageItems).where(eq(shortageItems.id, input.id)).limit(1))[0];
+  if (!item || item.status === "deleted") throw new Error("الصنف غير موجود");
+  await db.update(shortageItems).set({
+    productName: input.productName,
+    dosageForm: input.dosageForm,
+    quantity: input.quantity,
+    priority: input.priority,
+    internalLabel: input.internalLabel ?? null,
+    notes: input.notes ?? null,
+    suggestedSupplierId: input.suggestedSupplierId ?? null,
+  }).where(eq(shortageItems.id, input.id));
+  await createAudit("shortage_updated", "shortage_item", input.id, input.actorUserId, input.productName);
 }
 
 export async function softDeleteShortageItem(itemId: number, actorUserId: number) {
@@ -412,6 +445,12 @@ export async function updateAppSettings(input: {
   visibleNavigation?: string | null;
   topNotice?: string | null;
   navigationOrder?: string | null;
+  chatEnabled?: boolean;
+  chatTitle?: string;
+  chatDescription?: string;
+  chatUsersCanSend?: boolean;
+  showInternalLabels?: boolean;
+  internalLabelOptions?: string;
   actorUserId: number;
 }) {
   const db = await getDb();
@@ -439,10 +478,56 @@ export async function updateAppSettings(input: {
     visibleNavigation: input.visibleNavigation ?? current.visibleNavigation,
     topNotice: input.topNotice ?? null,
     navigationOrder: input.navigationOrder ?? null,
+    chatEnabled: input.chatEnabled ?? current.chatEnabled,
+    chatTitle: input.chatTitle ?? current.chatTitle,
+    chatDescription: input.chatDescription ?? current.chatDescription,
+    chatUsersCanSend: input.chatUsersCanSend ?? current.chatUsersCanSend,
+    showInternalLabels: input.showInternalLabels ?? current.showInternalLabels,
+    internalLabelOptions: input.internalLabelOptions ?? current.internalLabelOptions,
     updatedByUserId: input.actorUserId,
   }).where(eq(appSettings.id, 1));
   await createAudit("app_settings_updated", "app_settings", 1, input.actorUserId, input.appName);
   return getAppSettings();
+}
+
+export async function listGroupChatMessages(limit = 120) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: groupChatMessages.id,
+    body: groupChatMessages.body,
+    createdByUserId: groupChatMessages.createdByUserId,
+    authorName: users.name,
+    authorRole: users.role,
+    createdAt: groupChatMessages.createdAt,
+  }).from(groupChatMessages)
+    .innerJoin(users, eq(groupChatMessages.createdByUserId, users.id))
+    .where(isNull(groupChatMessages.deletedAt))
+    .orderBy(desc(groupChatMessages.createdAt))
+    .limit(limit);
+}
+
+export async function createGroupChatMessage(body: string, createdByUserId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const normalized = normalizeChatMessage(body);
+  if (!normalized) throw new Error("اكتب رسالة قبل الإرسال");
+  const result = await db.insert(groupChatMessages).values({ body: normalized, createdByUserId });
+  const id = Number(result[0].insertId);
+  await createAudit("group_chat_message_created", "group_chat_message", id, createdByUserId);
+  return id;
+}
+
+export async function deleteGroupChatMessage(input: { id: number; actorUserId: number; canModerate: boolean }) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const message = (await db.select().from(groupChatMessages).where(eq(groupChatMessages.id, input.id)).limit(1))[0];
+  if (!message || message.deletedAt) throw new Error("الرسالة غير موجودة");
+  if (!canDeleteChatMessage({ authorUserId: message.createdByUserId, actorUserId: input.actorUserId, canModerate: input.canModerate })) {
+    throw new Error("لا يمكنك حذف رسالة مستخدم آخر");
+  }
+  await db.update(groupChatMessages).set({ deletedAt: new Date(), deletedByUserId: input.actorUserId }).where(eq(groupChatMessages.id, input.id));
+  await createAudit("group_chat_message_deleted", "group_chat_message", input.id, input.actorUserId);
 }
 
 export async function listVisibleMessages(userId: number) {
@@ -574,6 +659,7 @@ export async function rolloverOpenShortages(targetDayKey = cairoDayKey()) {
         dosageForm: source.dosageForm,
         quantity: source.quantity,
         priority: source.priority,
+        internalLabel: source.internalLabel,
         status: "open" as const,
         notes: source.notes,
         suggestedSupplierId: source.suggestedSupplierId,

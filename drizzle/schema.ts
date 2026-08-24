@@ -46,6 +46,7 @@ export const shortageItems = mysqlTable("shortage_items", {
   dosageForm: varchar("dosageForm", { length: 32 }).default("أقراص").notNull(),
   quantity: int("quantity").default(1).notNull(),
   priority: mysqlEnum("priority", ["normal", "important", "urgent"]).default("normal").notNull(),
+  internalLabel: varchar("internalLabel", { length: 64 }),
   status: mysqlEnum("status", ["open", "received", "deleted"]).default("open").notNull(),
   notes: text("notes"),
   suggestedSupplierId: int("suggestedSupplierId").references(() => shortageSuppliers.id),
@@ -134,10 +135,28 @@ export const appSettings = mysqlTable("app_settings", {
   visibleNavigation: text("visibleNavigation"),
   topNotice: varchar("topNotice", { length: 255 }),
   navigationOrder: text("navigationOrder"),
+  chatEnabled: boolean("chatEnabled").notNull().default(true),
+  chatTitle: varchar("chatTitle", { length: 120 }).notNull().default("دردشة الفريق"),
+  chatDescription: varchar("chatDescription", { length: 255 }).notNull().default("تواصل سريع بين فريق الصيدلية."),
+  chatUsersCanSend: boolean("chatUsersCanSend").notNull().default(true),
+  showInternalLabels: boolean("showInternalLabels").notNull().default(true),
+  internalLabelOptions: varchar("internalLabelOptions", { length: 255 }).notNull().default("غير مهم,مهم,ضروري,موصى عليه,سؤال عابر"),
   updatedByUserId: int("updatedByUserId").references(() => users.id),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
+
+export const groupChatMessages = mysqlTable("group_chat_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  body: text("body").notNull(),
+  createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+  deletedAt: timestamp("deletedAt"),
+  deletedByUserId: int("deletedByUserId").references(() => users.id),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("group_chat_messages_created_index").on(table.createdAt),
+  index("group_chat_messages_deleted_index").on(table.deletedAt),
+]);
 
 export const appMessages = mysqlTable("app_messages", {
   id: int("id").autoincrement().primaryKey(),
