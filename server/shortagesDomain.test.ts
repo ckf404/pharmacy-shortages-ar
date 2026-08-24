@@ -57,4 +57,9 @@ describe("shortages domain", () => {
     ];
     expect(selectRolloverCandidates(previousInvoice, [])).toEqual([{ id: 21, status: "open" }]);
   });
+
+  it("keeps every open item eligible for carry-forward even when older days exist", () => {
+    const skippedDays = [{ id: 31, status: "open" }, { id: 32, status: "received" }];
+    expect(selectRolloverCandidates(skippedDays, [])).toEqual([{ id: 31, status: "open" }]);
+  });
 });

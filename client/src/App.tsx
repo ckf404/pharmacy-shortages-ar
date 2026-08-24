@@ -12,6 +12,7 @@ import Suppliers from "./pages/Suppliers";
 import Profile from "./pages/Profile";
 import { UsersPage } from "./pages/Management";
 import SettingsPage from "./pages/SettingsPage";
+import SupervisorControls from "./pages/SupervisorControls";
 import { Loader2, ShieldAlert } from "lucide-react";
 import { hasPermission } from "./lib/permissions";
 
@@ -26,6 +27,7 @@ function Router() {
     <Route path="/profile" component={Profile} />
     <Route path="/suppliers">{hasPermission(user, "suppliers_manage") ? <Suppliers /> : <NotAllowed />}</Route>
     <Route path="/users">{hasPermission(user, "users_manage") ? <UsersPage /> : <NotAllowed />}</Route>
+    <Route path="/settings/control">{hasPermission(user, "settings_manage") ? <SupervisorControls /> : <NotAllowed />}</Route>
     <Route path="/settings">{hasPermission(user, "messages_manage") || hasPermission(user, "settings_manage") || hasPermission(user, "rollover_manage") ? <SettingsPage /> : <NotAllowed />}</Route>
     <Route path="/404" component={NotFound} />
     <Route component={NotFound} />

@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -184,6 +184,8 @@ export async function getOrCreateShortageDay(dayKey = cairoDayKey()) {
 export async function getTodayDashboard(dayKey = cairoDayKey()) {
   const db = await getDb();
   if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  // A dashboard visit is a safe, idempotent catch-up path if the midnight Heartbeat was delayed or missed.
+  await rolloverOpenShortages(dayKey);
   const day = await getOrCreateShortageDay(dayKey);
   return { day, items: await listInvoiceItems(day.id) };
 }
@@ -243,7 +245,7 @@ export async function listShortageDayArchive(limit = 31) {
 
 export async function createShortageItem(input: {
   productName: string;
-  dosageForm: "أقراص" | "شراب" | "مرهم" | "نقط" | "كريم";
+  dosageForm: "أقراص" | "شراب" | "مرهم" | "نقط" | "كريم" | "حقن";
   quantity: number;
   priority: "normal" | "important" | "urgent";
   notes?: string | null;
@@ -343,6 +345,15 @@ export async function updateAppSettings(input: {
   welcomeText: string;
   dashboardSubtitle: string;
   accentColor: string;
+  showDashboardStats?: boolean;
+  showShortageForm?: boolean;
+  showPriorityPicker?: boolean;
+  showSupplierPicker?: boolean;
+  showNotesField?: boolean;
+  showInvoiceArchive?: boolean;
+  enabledDosageForms?: string | null;
+  quantityPresets?: string;
+  visibleNavigation?: string | null;
   topNotice?: string | null;
   navigationOrder?: string | null;
   actorUserId: number;
@@ -350,6 +361,7 @@ export async function updateAppSettings(input: {
   const db = await getDb();
   if (!db) throw new Error("قاعدة البيانات غير متاحة");
   await getAppSettings();
+  const current = await getAppSettings();
   await db.update(appSettings).set({
     appName: input.appName,
     pharmacyName: input.pharmacyName,
@@ -360,6 +372,15 @@ export async function updateAppSettings(input: {
     welcomeText: input.welcomeText,
     dashboardSubtitle: input.dashboardSubtitle,
     accentColor: input.accentColor,
+    showDashboardStats: input.showDashboardStats ?? current.showDashboardStats,
+    showShortageForm: input.showShortageForm ?? current.showShortageForm,
+    showPriorityPicker: input.showPriorityPicker ?? current.showPriorityPicker,
+    showSupplierPicker: input.showSupplierPicker ?? current.showSupplierPicker,
+    showNotesField: input.showNotesField ?? current.showNotesField,
+    showInvoiceArchive: input.showInvoiceArchive ?? current.showInvoiceArchive,
+    enabledDosageForms: input.enabledDosageForms ?? current.enabledDosageForms,
+    quantityPresets: input.quantityPresets ?? current.quantityPresets,
+    visibleNavigation: input.visibleNavigation ?? current.visibleNavigation,
     topNotice: input.topNotice ?? null,
     navigationOrder: input.navigationOrder ?? null,
     updatedByUserId: input.actorUserId,
@@ -479,7 +500,11 @@ export async function rolloverOpenShortages(targetDayKey = cairoDayKey()) {
   return db.transaction(async tx => {
     await tx.insert(shortageDays).values({ dayKey: targetDayKey }).onDuplicateKeyUpdate({ set: { dayKey: sql`dayKey` } });
     const targetDay = (await tx.select().from(shortageDays).where(eq(shortageDays.dayKey, targetDayKey)).limit(1))[0]!;
-    const sourceDay = (await tx.select().from(shortageDays).where(eq(shortageDays.dayKey, sourceDayKey)).limit(1))[0];
+    const mostRecentOpenSource = await tx.select({ id: shortageDays.id, dayKey: shortageDays.dayKey })
+      .from(shortageDays).innerJoin(shortageItems, eq(shortageItems.shortageDayId, shortageDays.id))
+      .where(and(lt(shortageDays.dayKey, targetDayKey), eq(shortageItems.status, "open")))
+      .orderBy(desc(shortageDays.dayKey)).limit(1);
+    const sourceDay = mostRecentOpenSource[0];
     if (!sourceDay) return { sourceDayKey, targetDayKey, copied: 0 };
     const sources = await tx.select().from(shortageItems).where(eq(shortageItems.shortageDayId, sourceDay.id));
     if (sources.length === 0) return { sourceDayKey, targetDayKey, copied: 0 };

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { hasPermission, type PermissionKey } from "@/lib/permissions";
-import { Bell, Building2, CheckCheck, ClipboardList, LogOut, Menu, Settings2, ShieldCheck, Stethoscope, Trophy, UsersRound, X } from "lucide-react";
+import { Bell, Building2, CheckCheck, ClipboardList, LogOut, Menu, Settings2, ShieldCheck, SlidersHorizontal, Stethoscope, Trophy, UsersRound, X } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
 
@@ -14,7 +14,8 @@ const navigation: NavigationItem[] = [
   { key: "profile", path: "/profile", label: "حسابي وإنجازاتي", icon: Trophy },
   { key: "suppliers", path: "/suppliers", label: "المخازن", icon: Building2, permissions: ["suppliers_manage"] },
   { key: "users", path: "/users", label: "المستخدمون", icon: UsersRound, permissions: ["users_manage"] },
-  { key: "settings", path: "/settings", label: "مركز التحكم", icon: Settings2, permissions: ["messages_manage", "settings_manage", "rollover_manage", "activity_view"] },
+  { key: "control", path: "/settings/control", label: "تحكم المشرف", icon: SlidersHorizontal, permissions: ["settings_manage"] },
+  { key: "settings", path: "/settings/control", label: "مركز التحكم", icon: Settings2, permissions: ["messages_manage", "settings_manage", "rollover_manage", "activity_view"] },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -26,7 +27,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const inbox = trpc.messages.inbox.useQuery(undefined, { enabled: !!user });
   const readMessage = trpc.messages.read.useMutation({ onSuccess: () => inbox.refetch() });
   const desiredOrder = presentation.data?.navigationOrder?.split(",").map(item => item.trim()).filter(Boolean) ?? [];
-  const allowed = navigation.filter(item => user && (!item.permissions || item.permissions.some(permission => hasPermission(user, permission)))).sort((a, b) => {
+  const visibleKeys = presentation.data?.visibleNavigation?.split(",").map(item => item.trim()).filter(Boolean) ?? navigation.map(item => item.key);
+  const allowed = navigation.filter(item => user && (item.key === "settings" || visibleKeys.includes(item.key)) && (!item.permissions || item.permissions.some(permission => hasPermission(user, permission)))).sort((a, b) => {
     const aIndex = desiredOrder.indexOf(a.key); const bIndex = desiredOrder.indexOf(b.key);
     return (aIndex < 0 ? 99 : aIndex) - (bIndex < 0 ? 99 : bIndex);
   });
