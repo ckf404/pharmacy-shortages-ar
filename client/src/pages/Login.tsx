@@ -49,7 +49,7 @@ export default function Login() {
         <section className="vip-login-card mx-auto w-full max-w-md min-w-0 rounded-[1.75rem] border border-white/60 bg-white/95 p-6 shadow-2xl shadow-slate-950/30 backdrop-blur sm:p-8">
           <div className="mb-8 text-center lg:text-right">
             <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-50 text-teal-700 lg:hidden"><Stethoscope className="h-6 w-6" /></div>
-            <p className="login-brand text-sm font-bold">{presentation.data?.appName ?? "نواقص الصيدلية"}</p>
+            <div className="login-vip-pulse"><span /><p>منصّة تشغيل VIP</p></div><p className="login-brand mt-3 text-sm font-bold">{presentation.data?.appName ?? "نواقص الصيدلية"}</p>
             <h2 className="mt-2 text-2xl font-bold text-slate-900">تسجيل الدخول</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">اختر نوع الحساب ثم اسم المستخدم من القائمة.</p>
           </div>
