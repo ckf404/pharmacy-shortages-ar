@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -556,11 +556,11 @@ export async function rolloverOpenShortages(targetDayKey = cairoDayKey()) {
   return db.transaction(async tx => {
     await tx.insert(shortageDays).values({ dayKey: targetDayKey }).onDuplicateKeyUpdate({ set: { dayKey: sql`dayKey` } });
     const targetDay = (await tx.select().from(shortageDays).where(eq(shortageDays.dayKey, targetDayKey)).limit(1))[0]!;
-    const mostRecentOpenSource = await tx.select({ id: shortageDays.id, dayKey: shortageDays.dayKey })
+    const mostRecentCarryForwardSource = await tx.select({ id: shortageDays.id, dayKey: shortageDays.dayKey })
       .from(shortageDays).innerJoin(shortageItems, eq(shortageItems.shortageDayId, shortageDays.id))
-      .where(and(lt(shortageDays.dayKey, targetDayKey), eq(shortageItems.status, "open")))
+      .where(and(lt(shortageDays.dayKey, targetDayKey), notInArray(shortageItems.status, ["received", "deleted"])))
       .orderBy(desc(shortageDays.dayKey)).limit(1);
-    const sourceDay = mostRecentOpenSource[0];
+    const sourceDay = mostRecentCarryForwardSource[0];
     if (!sourceDay) return { sourceDayKey, targetDayKey, copied: 0 };
     const sources = await tx.select().from(shortageItems).where(eq(shortageItems.shortageDayId, sourceDay.id));
     if (sources.length === 0) return { sourceDayKey, targetDayKey, copied: 0 };
@@ -584,7 +584,7 @@ export async function rolloverOpenShortages(targetDayKey = cairoDayKey()) {
         action: "shortages_rolled_over",
         entityType: "shortage_day",
         entityId: targetDay.id,
-        details: `from:${sourceDayKey}; copied:${pending.length}`,
+        details: `from:${sourceDay.dayKey}; copied:${pending.length}`,
         actorUserId: null,
       });
     }

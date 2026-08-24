@@ -87,16 +87,19 @@ export default function Shortages() {
     }
   };
 
-  const renderItem = (item: any, received = false) => <li key={item.id} className={`group rounded-2xl border p-4 shadow-sm transition ${received ? "border-emerald-100 bg-emerald-50/45" : "border-slate-100 bg-white hover:border-teal-100 hover:shadow-md"}`}>
+  const renderItem = (item: any, received = false) => {
+    const isSelected = selected.includes(item.id);
+    return <li key={item.id} className={`group shortage-item-row rounded-2xl border p-4 shadow-sm ${received ? "shortage-item-received border-emerald-100 bg-emerald-50/45" : "border-slate-100 bg-white"} ${isSelected ? "shortage-item-selected" : ""}`}>
     <div className="flex items-start gap-3">
-      {!received && <Checkbox checked={selected.includes(item.id)} onCheckedChange={() => toggleSelected(item.id)} aria-label={`تحديد ${item.productName}`} className="mt-1" />}
+      {!received && <Checkbox checked={isSelected} onCheckedChange={() => toggleSelected(item.id)} aria-label={`تحديد ${item.productName}`} className="shortage-select-box mt-0.5" />}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2"><h3 className={`font-bold ${received ? "text-slate-500 line-through decoration-emerald-500 decoration-2" : "text-slate-800"}`}>{item.productName}</h3><span className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${priorityClass[item.priority as keyof typeof priorityClass]}`}>{priorityText[item.priority as keyof typeof priorityText]}</span>{received && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white"><CheckCircle2 className="h-3.5 w-3.5" />تم الاستلام</span>}</div>
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span><Pill className="ml-1 inline h-3.5 w-3.5" />{item.dosageForm} · الكمية {item.quantity}</span>{item.suggestedSupplierName && <span><Truck className="ml-1 inline h-3.5 w-3.5" />{item.suggestedSupplierName}</span>}{item.notes && <span>{item.notes}</span>}{received && item.receivedAt && <span>استُلم {new Date(item.receivedAt).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}</span>}</div>
       </div>
-      <div className="flex shrink-0 gap-1">{canUpdate && (received ? <Button variant="ghost" size="icon" className="text-slate-500 hover:text-teal-700" onClick={() => setStatus.mutate({ id: item.id, status: "open" })} title="إرجاع للقائمة"><RotateCcw className="h-4 w-4" /></Button> : <Button variant="ghost" size="icon" className="text-teal-700 hover:bg-teal-50" onClick={() => { setSelected(current => current.filter(value => value !== item.id)); setStatus.mutate({ id: item.id, status: "received" }); }} title="تم الاستلام"><Check className="h-5 w-5" /></Button>)}{canDelete && <Button variant="ghost" size="icon" className="text-slate-400 hover:bg-rose-50 hover:text-rose-700" onClick={() => window.confirm(`حذف «${item.productName}» من القائمة؟`) && deleteItem.mutate({ id: item.id })} title="حذف"><Trash2 className="h-4 w-4" /></Button>}</div>
+      <div className="flex shrink-0 gap-1">{canUpdate && (received ? <Button variant="ghost" size="icon" className="shortage-action-control text-slate-500 hover:text-teal-700" onClick={() => setStatus.mutate({ id: item.id, status: "open" })} title="إرجاع للقائمة" aria-label={`إرجاع ${item.productName} للقائمة`}><RotateCcw className="h-4 w-4" /></Button> : <Button variant="ghost" size="icon" className="shortage-receive-control" onClick={() => { setSelected(current => current.filter(value => value !== item.id)); setStatus.mutate({ id: item.id, status: "received" }); }} title="تم الاستلام" aria-label={`تعليم ${item.productName} كمستلم`}><Check className="h-5 w-5" /></Button>)}{canDelete && <Button variant="ghost" size="icon" className="shortage-action-control text-slate-400 hover:bg-rose-50 hover:text-rose-700" onClick={() => window.confirm(`حذف «${item.productName}» من القائمة؟`) && deleteItem.mutate({ id: item.id })} title="حذف" aria-label={`حذف ${item.productName}`}><Trash2 className="h-4 w-4" /></Button>}</div>
     </div>
   </li>;
+  };
 
   if (dashboard.isLoading) return <div className="page-loader"><Loader2 className="h-6 w-6 animate-spin" />جاري تجهيز فاتورة اليوم…</div>;
 

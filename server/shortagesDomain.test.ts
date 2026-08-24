@@ -40,15 +40,16 @@ describe("shortages domain", () => {
     expect(whatsappUrl("201012345678", message)).toContain("https://wa.me/201012345678?text=");
   });
 
-  it("selects open shortages only and remains safe when a previous run already copied items", () => {
+  it("selects every active non-received shortage and remains safe when a previous run already copied items", () => {
     const sources = [
       { id: 11, status: "open" },
       { id: 12, status: "received" },
       { id: 13, status: "deleted" },
       { id: 14, status: "open" },
+      { id: 15, status: "awaiting_supplier" },
     ];
-    expect(selectRolloverCandidates(sources, [14])).toEqual([{ id: 11, status: "open" }]);
-    expect(selectRolloverCandidates(sources, [11, 14])).toEqual([]);
+    expect(selectRolloverCandidates(sources, [14])).toEqual([{ id: 11, status: "open" }, { id: 15, status: "awaiting_supplier" }]);
+    expect(selectRolloverCandidates(sources, [11, 14, 15])).toEqual([]);
   });
 
   it("keeps received items in their original dated invoice instead of rolling them into a new one", () => {
