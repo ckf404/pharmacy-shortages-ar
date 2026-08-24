@@ -113,7 +113,7 @@ export const appRouter = router({
       .query(({ input }) => getShortageDayInvoice(input.dayKey)),
     create: permissionProcedure("shortages_create").input(z.object({
       productName: z.string().trim().min(1).max(255),
-      dosageForm: z.enum(["أقراص", "شراب", "مرهم", "نقط", "كريم", "حقن"]),
+      dosageForm: z.string().trim().min(1).max(64),
       quantity: z.number().int().min(1).max(999),
       priority: z.enum(["normal", "important", "urgent"]),
       suggestedSupplierId: z.number().int().positive().nullable().optional(),

@@ -245,7 +245,7 @@ export async function listShortageDayArchive(limit = 31) {
 
 export async function createShortageItem(input: {
   productName: string;
-  dosageForm: "أقراص" | "شراب" | "مرهم" | "نقط" | "كريم" | "حقن";
+  dosageForm: string;
   quantity: number;
   priority: "normal" | "important" | "urgent";
   notes?: string | null;

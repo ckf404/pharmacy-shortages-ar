@@ -14,10 +14,9 @@ import { toast } from "sonner";
 const priorityText = { normal: "عادي", important: "مهم", urgent: "عاجل للعميل" } as const;
 const priorityClass = { normal: "bg-sky-50 text-sky-700 ring-sky-100", important: "bg-amber-50 text-amber-800 ring-amber-100", urgent: "bg-rose-50 text-rose-700 ring-rose-100" } as const;
 const dosageForms = ["أقراص", "شراب", "مرهم", "نقط", "كريم", "حقن"] as const;
-type DosageForm = typeof dosageForms[number];
 
 export default function Shortages() {
-  const [form, setForm] = useState({ productName: "", dosageForm: "أقراص" as DosageForm, quantityChoice: "1", customQuantity: "", priority: "normal" as "normal" | "important" | "urgent", suggestedSupplierId: "none", notes: "" });
+  const [form, setForm] = useState({ productName: "", dosageForm: "أقراص", quantityChoice: "1", customQuantity: "", priority: "normal" as "normal" | "important" | "urgent", suggestedSupplierId: "none", notes: "" });
   const [selected, setSelected] = useState<number[]>([]);
   const [orderSupplierId, setOrderSupplierId] = useState("");
   const [archiveDayKey, setArchiveDayKey] = useState<string | null>(null);
@@ -40,7 +39,7 @@ export default function Shortages() {
   const activeSuppliers = suppliers.data?.filter(supplier => supplier.active) ?? [];
   const previousInvoices = archive.data?.filter(day => day.dayKey !== dashboard.data?.day.dayKey) ?? [];
   const enabledDosageForms = useMemo(() => {
-    const allowed = presentation.data?.enabledDosageForms?.split(",").map(item => item.trim()).filter((item): item is DosageForm => dosageForms.includes(item as DosageForm));
+    const allowed = presentation.data?.enabledDosageForms?.split(",").map(item => item.trim()).filter(Boolean);
     return allowed?.length ? allowed : [...dosageForms];
   }, [presentation.data?.enabledDosageForms]);
   const quantityPresets = useMemo(() => {
@@ -57,6 +56,9 @@ export default function Shortages() {
     event.preventDefault();
     const quantity = form.quantityChoice === "custom" ? Number(form.customQuantity) : Number(form.quantityChoice);
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) return toast.error("اكتب كمية صحيحة من 1 إلى 999.");
+    const normalizedName = form.productName.trim().replace(/\s+/g, " ").toLocaleLowerCase("ar-EG");
+    const duplicates = dashboard.data?.items.filter(item => item.productName.trim().replace(/\s+/g, " ").toLocaleLowerCase("ar-EG") === normalizedName) ?? [];
+    if (duplicates.length > 0 && !window.confirm(`يوجد بالفعل ${duplicates.length} صنف باسم «${form.productName.trim()}» في فاتورة اليوم. هل تريد الإكمال وإضافة نسخة جديدة؟`)) return;
     await addItem.mutateAsync({ productName: form.productName, dosageForm: form.dosageForm, quantity, priority: form.priority, suggestedSupplierId: form.suggestedSupplierId === "none" ? null : Number(form.suggestedSupplierId), notes: form.notes || null });
     setForm({ productName: "", dosageForm: "أقراص", quantityChoice: "1", customQuantity: "", priority: "normal", suggestedSupplierId: "none", notes: "" });
     toast.success("تمت إضافة الصنف إلى فاتورة اليوم");
