@@ -14,7 +14,7 @@ import {
   shortageSuppliers,
   users,
 } from "../drizzle/schema";
-import { cairoDayKey, previousDayKey, selectRolloverCandidates } from "./shortagesDomain";
+import { cairoDayKey, decideArchivedTransfer, previousDayKey, selectRolloverCandidates } from "./shortagesDomain";
 import { achievementLevel } from "./profile";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -259,6 +259,62 @@ export async function createShortageItem(input: {
   const id = Number(result[0].insertId);
   await createAudit("shortage_created", "shortage_item", id, input.createdByUserId, input.productName);
   return id;
+}
+
+export async function manuallyAddArchivedShortage(sourceItemId: number, actorUserId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const targetDay = await getOrCreateShortageDay();
+  const source = (await db.select().from(shortageItems).where(eq(shortageItems.id, sourceItemId)).limit(1))[0];
+  if (!source || source.status === "deleted") throw new Error("صنف الفاتورة السابقة غير متاح");
+  if (source.shortageDayId === targetDay.id) throw new Error("الصنف موجود بالفعل ضمن فاتورة اليوم");
+  const duplicate = (await db.select({ id: shortageItems.id }).from(shortageItems).where(and(
+    eq(shortageItems.shortageDayId, targetDay.id),
+    eq(shortageItems.productName, source.productName),
+    eq(shortageItems.dosageForm, source.dosageForm),
+    eq(shortageItems.quantity, source.quantity),
+    inArray(shortageItems.status, ["open", "received"]),
+  )).limit(1))[0];
+  const deletedCopy = (await db.select({ id: shortageItems.id }).from(shortageItems).where(and(
+    eq(shortageItems.shortageDayId, targetDay.id),
+    eq(shortageItems.rolloverSourceItemId, source.id),
+    eq(shortageItems.status, "deleted"),
+  )).limit(1))[0];
+  const decision = decideArchivedTransfer(duplicate?.id, deletedCopy?.id);
+  if (decision.action === "existing") return { added: false, itemId: decision.itemId, restored: false };
+  if (decision.action === "restore") {
+    await db.update(shortageItems).set({
+      productName: source.productName,
+      dosageForm: source.dosageForm,
+      quantity: source.quantity,
+      priority: source.priority,
+      status: "open",
+      notes: source.notes,
+      suggestedSupplierId: source.suggestedSupplierId,
+      deletedAt: null,
+      deletedByUserId: null,
+      receivedAt: null,
+      receivedByUserId: null,
+      createdByUserId: actorUserId,
+    }).where(eq(shortageItems.id, decision.itemId));
+    await createAudit("shortage_manually_restored_from_archive", "shortage_item", decision.itemId, actorUserId, `source:${sourceItemId}; ${source.productName}`);
+    return { added: true, itemId: decision.itemId, restored: true };
+  }
+  const result = await db.insert(shortageItems).values({
+    shortageDayId: targetDay.id,
+    productName: source.productName,
+    dosageForm: source.dosageForm,
+    quantity: source.quantity,
+    priority: source.priority,
+    status: "open",
+    notes: source.notes,
+    suggestedSupplierId: source.suggestedSupplierId,
+    rolloverSourceItemId: source.id,
+    createdByUserId: actorUserId,
+  });
+  const itemId = Number(result[0].insertId);
+  await createAudit("shortage_manually_added_from_archive", "shortage_item", itemId, actorUserId, `source:${sourceItemId}; ${source.productName}`);
+  return { added: true, itemId, restored: false };
 }
 
 export async function setShortageItemStatus(itemId: number, status: "open" | "received", actorUserId: number) {

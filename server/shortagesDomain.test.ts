@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildWhatsAppMessage,
   cairoDayKey,
+  decideArchivedTransfer,
   isCairoMidnight,
   normalizeEgyptianWhatsApp,
   previousDayKey,
@@ -61,5 +62,15 @@ describe("shortages domain", () => {
   it("keeps every open item eligible for carry-forward even when older days exist", () => {
     const skippedDays = [{ id: 31, status: "open" }, { id: 32, status: "received" }];
     expect(selectRolloverCandidates(skippedDays, [])).toEqual([{ id: 31, status: "open" }]);
+  });
+
+  it("does not treat received archived items as candidates for automatic carry-forward", () => {
+    expect(selectRolloverCandidates([{ id: 40, status: "received" }], [])).toEqual([]);
+  });
+
+  it("chooses a duplicate, restoration, or creation action for manual archived transfers", () => {
+    expect(decideArchivedTransfer(9, 7)).toEqual({ action: "existing", itemId: 9 });
+    expect(decideArchivedTransfer(undefined, 7)).toEqual({ action: "restore", itemId: 7 });
+    expect(decideArchivedTransfer()).toEqual({ action: "create", itemId: null });
   });
 });

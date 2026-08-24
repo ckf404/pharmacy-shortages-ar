@@ -18,6 +18,12 @@ export type WhatsAppMessageSettings = {
 
 export type RolloverSource = { id: number; status: string };
 
+export function decideArchivedTransfer(activeDuplicateId?: number, deletedCopyId?: number) {
+  if (activeDuplicateId) return { action: "existing" as const, itemId: activeDuplicateId };
+  if (deletedCopyId) return { action: "restore" as const, itemId: deletedCopyId };
+  return { action: "create" as const, itemId: null };
+}
+
 export function selectRolloverCandidates<T extends RolloverSource>(items: T[], existingSourceIds: Iterable<number | null>) {
   const alreadyCopied = new Set(Array.from(existingSourceIds).filter((id): id is number => typeof id === "number"));
   return items.filter(item => item.status === "open" && !alreadyCopied.has(item.id));

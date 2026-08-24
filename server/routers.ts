@@ -28,6 +28,7 @@ import {
   listUsers,
   listVisibleMessages,
   markMessageRead,
+  manuallyAddArchivedShortage,
   rolloverOpenShortages,
   saveSupplier,
   setShortageItemStatus,
@@ -122,6 +123,8 @@ export const appRouter = router({
       .mutation(({ ctx, input }) => setShortageItemStatus(input.id, input.status, ctx.user.id)),
     delete: permissionProcedure("shortages_delete").input(z.object({ id: z.number().int().positive() }))
       .mutation(({ ctx, input }) => softDeleteShortageItem(input.id, ctx.user.id)),
+    addFromArchive: permissionProcedure("shortages_create").input(z.object({ sourceItemId: z.number().int().positive() }))
+      .mutation(({ ctx, input }) => manuallyAddArchivedShortage(input.sourceItemId, ctx.user.id)),
     prepareWhatsApp: permissionProcedure("orders_prepare").input(z.object({ supplierId: z.number().int().positive(), itemIds: z.array(z.number().int().positive()).min(1) }))
       .mutation(({ ctx, input }) => createSupplierOrder({ ...input, createdByUserId: ctx.user.id })),
     activity: permissionProcedure("activity_view").query(() => getActivityLogs()),
